@@ -21,7 +21,16 @@ import sys
 import os
 import argparse
 import itertools
-from typing import Tuple
+from typing import Tuple, List, Dict, Any
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    # tqdm がない場合はフォールバック
+    def tqdm(iterable, *args, **kwargs):
+        return iterable
+
 
 # プロジェクトルートを sys.path に追加して utils をロード
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -89,99 +98,161 @@ def patch_kaggle_environments() -> None:
         )
 
 
+def run_single_match_worker(
+    args_tuple: Tuple[str, str, int, bool],
+) -> Tuple[int, Dict[str, Any]]:
+    """ワーカープロセス内で実行される、1ゲームの対戦シミュレーション。
+
+    C++ ライブラリ libcg.so の状態干渉とメモリリークを防ぐため、
+    プロセスレベルで完全に隔離された空間で実行します。
+    """
+    agent_a_path, agent_b_path, match_id, is_player0_a = args_tuple
+
+    # 子プロセス環境の初期化
+    os.environ["PTCG_PROJECT_ROOT"] = project_root
+
+    # kaggle-environments の事前ロード
+    from kaggle_environments import make
+
+    try:
+        make("cabt")
+    except Exception:
+        pass
+
+    # cg モジュールのエイリアスを設定し、二重ロードを防止
+    import sys
+
+    for module_name in list(sys.modules.keys()):
+        if module_name.startswith("kaggle_environments.envs.cabt.cg"):
+            suffix = module_name[len("kaggle_environments.envs.cabt.cg") :]
+            alias_name = "cg" + suffix
+            sys.modules[alias_name] = sys.modules[module_name]
+
+    try:
+        # エージェント関数とデッキをロード
+        agent_a = load_agent(agent_a_path)
+        agent_b = load_agent(agent_b_path)
+        deck_a = load_deck(os.path.dirname(agent_a_path))
+        deck_b = load_deck(os.path.dirname(agent_b_path))
+    except Exception as e:
+        return match_id, {"winner": -2, "error": f"Initialization failed: {e}"}
+
+    # 先攻・後攻の入れ替え
+    players = [agent_a, agent_b] if is_player0_a else [agent_b, agent_a]
+    match_decks = [deck_a, deck_b] if is_player0_a else [deck_b, deck_a]
+
+    try:
+        env = make("cabt", configuration={"decks": match_decks}, debug=False)
+        env.run(players)
+    except Exception as e:
+        return match_id, {"winner": -2, "error": f"Execution crashed: {e}"}
+
+    # 対戦中にエラーが発生したか確認
+    has_error = False
+    for ps in env.state:
+        if getattr(ps, "status", None) == "ERROR":
+            has_error = True
+            break
+    if has_error:
+        return match_id, {"winner": -2, "error": "Agent execution error."}
+
+    reward_0 = getattr(env.state[0], "reward", None)
+    reward_1 = getattr(env.state[1], "reward", None)
+
+    if reward_0 is None or reward_1 is None:
+        return match_id, {"winner": -2, "error": "No reward data computed."}
+
+    # 勝者判定（先攻・後攻の入れ替えを考慮）
+    if reward_0 > reward_1:
+        winner_is_player0 = True
+    elif reward_1 > reward_0:
+        winner_is_player0 = False
+    else:
+        # 引き分け
+        return match_id, {"winner": -1, "error": None}
+
+    if is_player0_a:
+        winner = 0 if winner_is_player0 else 1
+    else:
+        winner = 1 if winner_is_player0 else 0
+
+    return match_id, {"winner": winner, "error": None}
+
+
 def run_match_series(
     agent_a_path: str,
     agent_b_path: str,
     matches: int,
     agent_a_name: str = "Agent A",
     agent_b_name: str = "Agent B",
+    workers: int = 1,
 ) -> Tuple[int, int, int, int]:
     """2つのエージェントを指定された回数対戦させ、結果を集計して返す。
+
+    Args:
+        agent_a_path: エージェントAの Python ファイルパス。
+        agent_b_path: エージェントBの Python ファイルパス。
+        matches: 対戦数。
+        agent_a_name: エージェントAの表示用名前。
+        agent_b_name: エージェントBの表示用名前。
+        workers: 並列実行するワーカー数。1 の場合はシングルプロセス（同期）実行。
 
     Returns:
         Tuple[int, int, int, int]: (Aの勝利数, Bの勝利数, 引き分け数, エラー数)
     """
-    from kaggle_environments import make
-
-    try:
-        # それぞれのエージェントをロード (ラッパー適用済み)
-        agent_a = load_agent(agent_a_path)
-        agent_b = load_agent(agent_b_path)
-
-        # それぞれのデッキをロード
-        deck_a = load_deck(os.path.dirname(agent_a_path))
-        deck_b = load_deck(os.path.dirname(agent_b_path))
-    except Exception as e:
-        print(f"Error initializing agents for match: {e}")
-        return 0, 0, 0, matches
-
     a_wins = 0
     b_wins = 0
     draws = 0
     errors = 0
 
-    for i in range(matches):
-        # 先攻・後攻を交互に入れ替え
-        a_is_player0 = i % 2 == 0
-        players = [agent_a, agent_b] if a_is_player0 else [agent_b, agent_a]
-        match_decks = [deck_a, deck_b] if a_is_player0 else [deck_b, deck_a]
+    # タスク引数の作成 (Aが先攻かどうかを交互に変更)
+    tasks = [(agent_a_path, agent_b_path, i, i % 2 == 0) for i in range(matches)]
 
-        try:
-            env = make("cabt", configuration={"decks": match_decks}, debug=False)
-            env.run(players)
-        except Exception as e:
-            print(f"Match {i + 1}: Error - {e}")
-            errors += 1
-            continue
+    # 1. マルチプロセス並列実行
+    if workers > 1:
+        print(f"Running matches in parallel using {workers} worker processes...")
+        # tqdm の進捗バー付きで実行
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(run_single_match_worker, task) for task in tasks]
+            for future in tqdm(as_completed(futures), total=matches, desc="Simulating"):
+                try:
+                    _, result = future.result()
+                    winner = result["winner"]
+                    if winner == 0:
+                        a_wins += 1
+                    elif winner == 1:
+                        b_wins += 1
+                    elif winner == -1:
+                        draws += 1
+                    else:
+                        errors += 1
+                        if result["error"]:
+                            print(f"  Game error: {result['error']}")
+                except Exception as e:
+                    errors += 1
+                    print(f"  Future resolution error: {e}")
 
-        # エラー確認
-        has_error = False
-        for ps in env.state:
-            if getattr(ps, "status", None) == "ERROR":
-                has_error = True
-                break
-        if has_error:
-            errors += 1
-            print(f"Match {i + 1}: Agent error.")
-            continue
-
-        reward_0 = getattr(env.state[0], "reward", None)
-        reward_1 = getattr(env.state[1], "reward", None)
-
-        if reward_0 is None or reward_1 is None:
-            errors += 1
-            error_msg = (
-                env.steps[0][0].get("error")
-                if (hasattr(env, "steps") and env.steps)
-                else "Unknown error"
-            )
-            print(f"Match {i + 1}: Game error. Details: {error_msg}")
-            continue
-
-        # 勝敗判定（先攻後攻の入れ替えを考慮）
-        if reward_0 > reward_1:
-            winner_is_player0 = True
-        elif reward_1 > reward_0:
-            winner_is_player0 = False
-        else:
-            draws += 1
-            continue
-
-        if a_is_player0:
-            if winner_is_player0:
+    # 2. シングルプロセス（同期）実行
+    else:
+        # デバッグや1コア実行時は従来通り同期で実行
+        for i, task in enumerate(tqdm(tasks, desc="Simulating")):
+            _, result = run_single_match_worker(task)
+            winner = result["winner"]
+            if winner == 0:
                 a_wins += 1
-            else:
+            elif winner == 1:
                 b_wins += 1
-        else:
-            if winner_is_player0:
-                b_wins += 1
+            elif winner == -1:
+                draws += 1
             else:
-                a_wins += 1
+                errors += 1
+                if result["error"]:
+                    print(f"Match {i + 1}: {result['error']}")
 
     return a_wins, b_wins, draws, errors
 
 
-def run_round_robin(matches_per_pair: int) -> None:
+def run_round_robin(matches_per_pair: int, workers: int = 1) -> None:
     """すべての自動検出されたエージェント間で総当たり戦を行う。"""
     agents = discover_agents(project_root)
     if len(agents) < 2:
@@ -197,7 +268,6 @@ def run_round_robin(matches_per_pair: int) -> None:
     print(f"Detected agents: {list(agents.keys())}")
 
     # 結果保存用スコアボード
-    # {agent_name: {"wins": 0, "losses": 0, "draws": 0, "errors": 0, "points": 0}}
     scoreboard = {
         name: {"wins": 0, "losses": 0, "draws": 0, "errors": 0, "points": 0.0}
         for name in agents
@@ -213,7 +283,7 @@ def run_round_robin(matches_per_pair: int) -> None:
         path_b = os.path.join(agents[name_b], "main.py")
 
         a_wins, b_wins, draws, errors = run_match_series(
-            path_a, path_b, matches_per_pair, name_a, name_b
+            path_a, path_b, matches_per_pair, name_a, name_b, workers=workers
         )
 
         print(
@@ -253,7 +323,9 @@ def run_round_robin(matches_per_pair: int) -> None:
     print("=" * 60)
 
 
-def run_baseline_mode(baseline_path: str, matches_per_pair: int) -> None:
+def run_baseline_mode(
+    baseline_path: str, matches_per_pair: int, workers: int = 1
+) -> None:
     """指定されたベースラインエージェントと、それ以外のすべてのアクティブなエージェントを対戦させる。"""
     abs_baseline_path = os.path.abspath(baseline_path)
     if not os.path.exists(abs_baseline_path):
@@ -283,7 +355,12 @@ def run_baseline_mode(baseline_path: str, matches_per_pair: int) -> None:
 
         print(f"\nMatchup: {name} vs {baseline_name}...")
         a_wins, b_wins, draws, errors = run_match_series(
-            agent_main, abs_baseline_path, matches_per_pair, name, baseline_name
+            agent_main,
+            abs_baseline_path,
+            matches_per_pair,
+            name,
+            baseline_name,
+            workers=workers,
         )
 
         total_completed = a_wins + b_wins + draws
@@ -338,6 +415,12 @@ def main() -> None:
         "--baseline",
         help="Path to a baseline agent main.py to compare all others against",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=max(1, (os.cpu_count() or 2) - 1),
+        help="Number of parallel worker processes. Set to 1 for sequential execution.",
+    )
     args = parser.parse_args()
 
     # Automatically patch kaggle-environments with the local simulation engine
@@ -370,9 +453,9 @@ def main() -> None:
 
     # モードの判定と実行
     if args.round_robin:
-        run_round_robin(args.matches)
+        run_round_robin(args.matches, workers=args.workers)
     elif args.baseline:
-        run_baseline_mode(args.baseline, args.matches)
+        run_baseline_mode(args.baseline, args.matches, workers=args.workers)
     elif args.agent_a and args.agent_b:
         # 個別対戦
         print(f"Starting benchmark: {args.matches} matches...")
@@ -380,7 +463,7 @@ def main() -> None:
         print(f"Agent B: {args.agent_b}")
 
         a_wins, b_wins, draws, errors = run_match_series(
-            args.agent_a, args.agent_b, args.matches
+            args.agent_a, args.agent_b, args.matches, workers=args.workers
         )
 
         total_played = a_wins + b_wins + draws
