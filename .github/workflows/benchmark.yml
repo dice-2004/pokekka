@@ -194,7 +194,7 @@ jobs:
           echo "| エージェント | パス | 勝率 |" >> comment.md
           echo "| --- | --- | --- |" >> comment.md
           echo "| **PR（今回実装）** | \`${A_LABEL}\` | **$A_RATE%** |" >> comment.md
-          echo "| **Base（現在のmain）** | \`latest_submission/main.py\` | **$B_RATE%** | (※$B_LABEL)" >> comment.md
+          echo "| **Base（現在のmain）** | \`${AGENT_B_PATH#main_branch/}\` | **$B_RATE%** | (※$B_LABEL)" >> comment.md
           echo "" >> comment.md
           echo "🎬 **対戦ビジュアルHTML**:" >> comment.md
           echo "代表対戦のビジュアルHTMLをビルドArtifactとして生成しました。下部にある \`match-visualization-html\` をダウンロードし、解凍してブラウザで開くことで対戦アニメーションを可視化再生できます。" >> comment.md

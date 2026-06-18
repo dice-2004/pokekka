@@ -30,9 +30,13 @@ def print_auth_guidance(error_msg: str) -> None:
     print("3. ダウンロードされた `kaggle.json` ファイルを以下の場所に配置します：")
     print("   - Linux/macOS/Docker:  ~/.kaggle/kaggle.json")
     print("   - Windows:             C:\\Users\\<ユーザー名>\\.kaggle\\kaggle.json")
-    print("4. ファイルのパーミッションを変更し、自分だけが読み取れるようにします (Linux/macOS)：")
+    print(
+        "4. ファイルのパーミッションを変更し、自分だけが読み取れるようにします (Linux/macOS)："
+    )
     print("   chmod 600 ~/.kaggle/kaggle.json")
-    print("5. Docker 内で実行する場合は、コンテナ起動時に ~/.kaggle をマウントしているか確認してください：")
+    print(
+        "5. Docker 内で実行する場合は、コンテナ起動時に ~/.kaggle をマウントしているか確認してください："
+    )
     print("   docker run -v ~/.kaggle:/root/.kaggle:ro ...")
     print("!" * 60 + "\n")
 
@@ -41,16 +45,23 @@ def fetch_samples() -> None:
     try:
         from kaggle.api.kaggle_api_extended import KaggleApi
     except ImportError:
-        print("`kaggle` package is not installed. Attempting to install it dynamically...")
+        print(
+            "`kaggle` package is not installed. Attempting to install it dynamically..."
+        )
         import subprocess
+
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "kaggle"])
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", "--user", "kaggle"]
+            )
             # sys.path にユーザーの site-packages を含める
             import site
+
             user_site = site.getusersitepackages()
             if user_site not in sys.path:
                 sys.path.insert(0, user_site)
             from kaggle.api.kaggle_api_extended import KaggleApi
+
             print("Successfully installed `kaggle` package.")
         except Exception as install_err:
             print(f"Failed to install `kaggle` package automatically: {install_err}")
@@ -117,8 +128,13 @@ def fetch_samples() -> None:
                     shutil.copy2(item, target_dir / item.name)
 
             # 最低限必要なファイルがあるか検証
-            if not (target_dir / "main.py").exists() or not (target_dir / "deck.csv").exists():
-                print(f"  Warning: Expected 'main.py' and 'deck.csv' inside {target_dir}, but they are missing.")
+            if (
+                not (target_dir / "main.py").exists()
+                or not (target_dir / "deck.csv").exists()
+            ):
+                print(
+                    f"  Warning: Expected 'main.py' and 'deck.csv' inside {target_dir}, but they are missing."
+                )
             else:
                 print(f"  Successfully fetched: {name} -> {target_dir}")
 
@@ -135,6 +151,7 @@ def fetch_samples() -> None:
     print("=" * 50)
     try:
         from tests.update_cg import sync_cg_folders
+
         sync_cg_folders()
     except Exception as e:
         print(f"Error executing update_cg.py: {e}")

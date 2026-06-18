@@ -2,6 +2,30 @@
 
 本ファイルは、プロジェクト開発における変更履歴、実装意図、検証結果を記録するログファイルです。
 
+## [2026-06-18 22:45] GitHub Actions PRコメントのベースラインパス表示修正 & コードフォーマット修正
+
+### 1. 作業概要
+- **ベースラインエージェントパス表示の不整合修正**:
+  - `.github/workflows/benchmark.yml` において、Baseエージェントのパスが `latest_submission/main.py` にハードコードされていたため、`latest_submission` が main ブランチに存在せず `sample_submission/main.py` にフォールバックした場合でも誤ったパスが表示される問題がありました。
+  - これを、実際に解決されたベースラインパス（`AGENT_B_PATH` から `main_branch/` を取り除いたもの）を動的に表示するようシェル変数展開 `${AGENT_B_PATH#main_branch/}` に修正しました。
+- **コードフォーマットエラーの解消**:
+  - CI の `validate` ジョブにおいて、`tests/fetch_samples.py` が `black` のフォーマットスタイルと不一致でエラーになっていたため、`black` を実行してコードを自動修正しました。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `.github/workflows/benchmark.yml` | 🟠 重大 | PRコメントに表示されるベースラインのパスを、フォールバック時も正しく反映されるよう変数参照に修正。 |
+| `tests/fetch_samples.py` | 🟡 軽微 | `black` による自動コードフォーマットの適用。 |
+| `LOG.md` | 🟡 軽微 | 今回の修正内容と動作検証結果を追記。 |
+
+### 3. 検証結果
+- ローカル Docker 環境 (`ptcg-dev:latest`) にて以下の検証を実施し、すべて正常に動作することを確認しました。
+  1. `black --check sample_submission/main.py tests/ $(find agents_draft agents latest_submission -name "*.py" -not -path "*/cg/*" 2>/dev/null || true)` が 100% グリーン（エラー 0 件）でパス。
+  2. `mypy` 静的型チェックが 100% グリーン（エラー 0 件）でパス。
+  3. `python tests/dry_run.py` によるエージェントドライランが 2 エージェント（`draft/sample_submission-a`, `latest_submission`）ともエラーなく正常終了（Passed 2, Failed 0）。
+
+---
+
 ## [2026-06-18 22:30] マルチプロセス並列対戦ベンチマークの実装および公式サンプル自動取得ツールの作成
 
 ### 1. 作業概要
