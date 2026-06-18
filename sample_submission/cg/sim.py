@@ -16,13 +16,26 @@ class SerialData(ctypes.Structure):
         ("selectPlayer", ctypes.c_int)
     ]
 
+import sys
 if os.name == 'nt':
     lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cg.dll")
 else:
     lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "libcg.so")
+
 lib = ctypes.cdll.LoadLibrary(lib_path)
 
-lib.GameInitialize()
+# GameInitialize loads CSV files. Switch CWD to project root to ensure they are found.
+_original_cwd = os.getcwd()
+_project_root = os.environ.get("PTCG_PROJECT_ROOT")
+if not _project_root:
+    _project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+try:
+    if os.path.exists(os.path.join(_project_root, "JP_Card_Data.csv")):
+        os.chdir(_project_root)
+    lib.GameInitialize()
+finally:
+    os.chdir(_original_cwd)
 
 lib.BattleStart.restype = StartData
 lib.BattleStart.argtypes = [ctypes.POINTER(ctypes.c_int)]

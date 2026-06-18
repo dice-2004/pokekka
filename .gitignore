@@ -1,2 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Type checker / Linter caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Environment / Secrets
+.env
+.env.local
+kaggle.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Large PDF files (card reference documents)
 Card_ID List_EN.pdf
 Card_ID List_JP.pdf
+
+# Benchmark / Test outputs
+scratch/result.html
+benchmark_result.txt
+comment.md

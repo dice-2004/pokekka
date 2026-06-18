@@ -1,0 +1,74 @@
+name: Agent Battle Benchmark
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'sample_submission/**'
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+    - name: Checkout PR branch
+      uses: actions/checkout@v4
+      with:
+        path: pr_branch
+
+    - name: Checkout target branch (main)
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.base_ref }}
+        path: main_branch
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install kaggle-environments
+
+    - name: Prepare agents for benchmark
+      run: |
+        # PRブランチ側のテストスクリプトを使用するため、そこに対照用（マージ先）のエージェントファイルを配置
+        # マージターゲットブランチの main.py を main_base.py としてコピー
+        cp main_branch/sample_submission/main.py pr_branch/sample_submission/main_base.py
+
+    - name: Run Battle Benchmark
+      id: run_bench
+      run: |
+        cd pr_branch
+        # 先攻後攻を均等にするため、20試合の対戦を実行
+        python tests/benchmark.py --agent-a sample_submission/main.py --agent-b sample_submission/main_base.py --matches 20 > benchmark_result.txt
+        cat benchmark_result.txt
+        
+        # SUMMARYから勝率データをパースして環境変数に格納
+        A_RATE=$(grep "SUMMARY:" benchmark_result.txt | sed -e 's/.*A_WIN_RATE=\([0-9.]*\).*/\1/')
+        B_RATE=$(grep "SUMMARY:" benchmark_result.txt | sed -e 's/.*B_WIN_RATE=\([0-9.]*\).*/\1/')
+        
+        # PRコメント用のマークダウンファイルを作成
+        echo "### 📊 対戦AI ベンチマーク結果" > comment.md
+        echo "本プルリクエストのコード変更によるAIの勝率変化を測定しました（20対戦）。" >> comment.md
+        echo "" >> comment.md
+        echo "| エージェント | 勝率 |" >> comment.md
+        echo "| --- | --- |" >> comment.md
+        echo "| **PR（今回実装）** | **$A_RATE%** |" >> comment.md
+        echo "| **Base（現在のmainブランチ）** | **$B_RATE%** |" >> comment.md
+        echo "" >> comment.md
+        echo "<details><summary>🔍 詳細ログの表示</summary>" >> comment.md
+        echo "" >> comment.md
+        echo "\`\`\`text" >> comment.md
+        cat benchmark_result.txt >> comment.md
+        echo "\`\`\`" >> comment.md
+        echo "</details>" >> comment.md
+
+    - name: Comment on PR
+      uses: mshick/add-pr-comment@v3
+      with:
+        message-path: pr_branch/comment.md
