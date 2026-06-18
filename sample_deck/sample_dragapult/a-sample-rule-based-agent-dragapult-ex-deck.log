@@ -1,0 +1,18 @@
+[{"stream_name":"stderr","time":9.927443118,"data":"0.00s - Debugger warning: It seems that frozen modules are being used, which may\n"}
+,{"stream_name":"stderr","time":9.927648913,"data":"0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off\n"}
+,{"stream_name":"stderr","time":9.927658516,"data":"0.00s - to python to disable frozen modules.\n"}
+,{"stream_name":"stderr","time":9.927673149,"data":"0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.\n"}
+,{"stream_name":"stderr","time":10.715777152,"data":"0.00s - Debugger warning: It seems that frozen modules are being used, which may\n"}
+,{"stream_name":"stderr","time":10.715838118,"data":"0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off\n"}
+,{"stream_name":"stderr","time":10.715842833,"data":"0.00s - to python to disable frozen modules.\n"}
+,{"stream_name":"stderr","time":10.715845867,"data":"0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.\n"}
+,{"stream_name":"stdout","time":14.230962196,"data":"Writing main.py\n"}
+,{"stream_name":"stderr","time":19.349585493,"data":"/usr/local/lib/python3.11/dist-packages/traitlets/traitlets.py:2915: FutureWarning: --Exporter.preprocessors=[\"remove_papermill_header.RemovePapermillHeader\"] for containers is deprecated in traitlets 5.0. You can pass `--Exporter.preprocessors item` ... multiple times to add items to a list.\n"}
+,{"stream_name":"stderr","time":19.349643532,"data":"  warn(\n"}
+,{"stream_name":"stderr","time":19.395315985,"data":"[NbConvertApp] Converting notebook __notebook__.ipynb to notebook\n"}
+,{"stream_name":"stderr","time":19.762240119,"data":"[NbConvertApp] Writing 46106 bytes to __notebook__.ipynb\n"}
+,{"stream_name":"stderr","time":23.226810235,"data":"/usr/local/lib/python3.11/dist-packages/traitlets/traitlets.py:2915: FutureWarning: --Exporter.preprocessors=[\"nbconvert.preprocessors.ExtractOutputPreprocessor\"] for containers is deprecated in traitlets 5.0. You can pass `--Exporter.preprocessors item` ... multiple times to add items to a list.\n"}
+,{"stream_name":"stderr","time":23.226872926,"data":"  warn(\n"}
+,{"stream_name":"stderr","time":23.262398759,"data":"[NbConvertApp] Converting notebook __notebook__.ipynb to html\n"}
+,{"stream_name":"stderr","time":24.361745911,"data":"[NbConvertApp] Writing 419346 bytes to __results__.html\n"}
+]

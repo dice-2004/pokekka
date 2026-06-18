@@ -29,10 +29,11 @@ def _collect_sync_targets() -> list[tuple[str, str]]:
     """
     targets: list[tuple[str, str]] = []
 
-    # agents_draft/ と agents/ 配下のサブフォルダ
+    # agents_draft/, agents/, sample_deck/ 配下のサブフォルダ
     scan_dirs = [
         ("agents_draft", "draft"),
         ("agents", "completed"),
+        ("sample_deck", "sample_deck"),
     ]
     for dir_name, label in scan_dirs:
         parent = os.path.join(project_root, dir_name)

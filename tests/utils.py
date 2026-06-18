@@ -172,11 +172,30 @@ def load_agent(path: str) -> Callable:
 
     agent_dir = os.path.dirname(abs_path)
 
-    # ロード自体も一時的にエージェントディレクトリおよび共通 sample_submission パスを sys.path に含めて実行
-    project_root = os.path.abspath(os.path.join(agent_dir, "..", ".."))
-    common_dir = os.path.join(project_root, "sample_submission")
-    with temporary_sys_path([agent_dir, common_dir]):
-        spec.loader.exec_module(module)
+    # 共通 sample_submission ディレクトリを親方向へ遡って自動探索
+    current_dir = agent_dir
+    common_dir = None
+    for _ in range(4):
+        candidate = os.path.join(current_dir, "sample_submission")
+        if os.path.isdir(candidate):
+            common_dir = candidate
+            break
+        current_dir = os.path.dirname(current_dir)
+        if not current_dir or current_dir == os.path.dirname(current_dir):
+            break
+
+    if common_dir is None:
+        project_root = os.path.abspath(os.path.join(agent_dir, "..", ".."))
+        common_dir = os.path.join(project_root, "sample_submission")
+
+    # ロード自体も一時的に CWD、およびエージェントディレクトリと共通 sample_submission パスを sys.path に含めて実行
+    original_cwd = os.getcwd()
+    os.chdir(agent_dir)
+    try:
+        with temporary_sys_path([agent_dir, common_dir]):
+            spec.loader.exec_module(module)
+    finally:
+        os.chdir(original_cwd)
 
     if not hasattr(module, "agent"):
         raise AttributeError(f"Module at {abs_path} does not have an 'agent' function")
