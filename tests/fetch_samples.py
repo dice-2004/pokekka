@@ -26,14 +26,16 @@ def print_auth_guidance(error_msg: str) -> None:
     print("\nKaggle API の認証キーが見つからないか、エラーが発生しました。")
     print("以下の手順に従って認証設定を行ってください：\n")
     print("1. Kaggle にログインし、右上のユーザーアイコンから「Settings」を開きます。")
-    print("2. 「API」セクションにある「Create New Token」をクリックします。")
-    print("3. ダウンロードされた `kaggle.json` ファイルを以下の場所に配置します：")
-    print("   - Linux/macOS/Docker:  ~/.kaggle/kaggle.json")
-    print("   - Windows:             C:\\Users\\<ユーザー名>\\.kaggle\\kaggle.json")
+    print("2. 「API」セクションにある「Create New Token」等からトークンを取得します。")
+    print(
+        "3. 取得したトークンを直書きした `access_token` ファイルを以下の場所に配置します："
+    )
+    print("   - Linux/macOS/Docker:  ~/.kaggle/access_token")
+    print("   - Windows:             C:\\Users\\<ユーザー名>\\.kaggle\\access_token")
     print(
         "4. ファイルのパーミッションを変更し、自分だけが読み取れるようにします (Linux/macOS)："
     )
-    print("   chmod 600 ~/.kaggle/kaggle.json")
+    print("   chmod 600 ~/.kaggle/access_token")
     print(
         "5. Docker 内で実行する場合は、コンテナ起動時に ~/.kaggle をマウントしているか確認してください："
     )
@@ -42,8 +44,9 @@ def print_auth_guidance(error_msg: str) -> None:
 
 
 def fetch_samples() -> None:
+    # 1. パッケージがインストールされているか確認し、ない場合はインストールを試みる
     try:
-        from kaggle.api.kaggle_api_extended import KaggleApi
+        import kaggle
     except ImportError:
         print(
             "`kaggle` package is not installed. Attempting to install it dynamically..."
@@ -54,23 +57,40 @@ def fetch_samples() -> None:
             subprocess.check_call(
                 [sys.executable, "-m", "pip", "install", "--user", "kaggle"]
             )
-            # sys.path にユーザーの site-packages を含める
-            import site
-
-            user_site = site.getusersitepackages()
-            if user_site not in sys.path:
-                sys.path.insert(0, user_site)
-            from kaggle.api.kaggle_api_extended import KaggleApi
-
             print("Successfully installed `kaggle` package.")
         except Exception as install_err:
             print(f"Failed to install `kaggle` package automatically: {install_err}")
             print("Please run manually: pip install kaggle")
             sys.exit(1)
 
-    # Kaggle APIの初期化と認証
+    # sys.path にユーザーの site-packages を含める
+    import site
+
+    user_site = site.getusersitepackages()
+    if user_site not in sys.path:
+        sys.path.insert(0, user_site)
+
+    # access_token ファイルからトークンを読み取って環境変数にセット
+    access_token_path = Path("/root/.kaggle/access_token")
+    if not access_token_path.exists():
+        access_token_path = Path(os.path.expanduser("~/.kaggle/access_token"))
+
+    if access_token_path.exists():
+        try:
+            token = access_token_path.read_text().strip()
+            os.environ["KAGGLE_KEY"] = token
+            # KAGGLE_USERNAME が未設定の場合は、フォールバック値を設定
+            if not os.environ.get("KAGGLE_USERNAME"):
+                os.environ["KAGGLE_USERNAME"] = "dice-2004"
+            print(f"Loaded Kaggle API token from {access_token_path}")
+        except Exception as read_err:
+            print(f"Warning: Failed to read access_token: {read_err}")
+
+    # 2. Kaggle APIの初期化と認証
     print("Initializing Kaggle API client...")
     try:
+        from kaggle.api.kaggle_api_extended import KaggleApi
+
         api = KaggleApi()
         api.authenticate()
     except Exception as e:
@@ -85,17 +105,17 @@ def fetch_samples() -> None:
         "sample_iono": "kiyotah/a-sample-rule-based-agent-iono-s-deck",
     }
 
-    draft_dir = project_root / "agents_draft"
-    draft_dir.mkdir(parents=True, exist_ok=True)
+    sample_deck_dir = project_root / "sample_deck"
+    sample_deck_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Discovered {len(samples)} sample agents to download.")
 
     for name, kernel_id in samples.items():
-        target_dir = draft_dir / name
+        target_dir = sample_deck_dir / name
         print(f"\nFetching {name} from kernel '{kernel_id}'...")
 
         # 一時的なダウンロード先ディレクトリを作成
-        tmp_dir = draft_dir / f"tmp_{name}"
+        tmp_dir = sample_deck_dir / f"tmp_{name}"
         if tmp_dir.exists():
             shutil.rmtree(tmp_dir)
         tmp_dir.mkdir(parents=True, exist_ok=True)

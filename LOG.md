@@ -2,6 +2,143 @@
 
 本ファイルは、プロジェクト開発における変更履歴、実装意図、検証結果を記録するログファイルです。
 
+## [2026-06-19 00:44] PR動作検証エラーの解消と AGENTS.md ガイドラインの最適化
+
+### 1. 作業概要
+- **PR上での Black およびベンチマーク初期化エラーの解消**:
+  - 原因：`agents_draft/` 配下に不完全な古いサンプルエージェント（`sample_abomasnow` など）の `main.py` だけが誤って Git インデックスに残ってしまっていた。これにより、PR時の Actions で Black のフォーマット違反が検出され、さらに `deck.csv` が見つからないために `/kaggle_simulations/agent/` にフォールバックしてクラッシュ（`FileNotFoundError`）が発生していた。
+  - 対策：`git rm -rf` を用いて、`agents_draft/` 配下に残っていた古いサンプルフォルダ（`sample_abomasnow`, `sample_iono`, `sample_lucario`, `sample_submission-a`）を Git から完全に削除し、コミットした。
+- **`AGENTS.md` のアップデート**:
+  - ユーザー指示に基づき、細分化したパス設計のコードを書き連ねる代わりに、「パス解決やインポート等のエラーが発生した場合は、基準となるテンプレート `sample_submission/main.py` のリファレンス実装を最優先で確認・模倣して解決する」という簡潔で効果的なガイドライン（エラー時のテンプレート参照）を `1.2 コード品質` セクションに追加。
+  - `3.2` セクションに `sample_deck/` フォルダの役割、`access_token` を用いる Kaggle 認証仕様、および `update_cg.py` の同期対象拡張の情報を反映。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `agents_draft/sample_*` (古い4つ) | 🔴 削除 | `agents_draft/` に残っていた不完全な残骸フォルダをリポジトリから完全に削除。 |
+| `.agents/AGENTS.md` | 🟡 軽微 | `sample_deck`、`access_token` の仕様反映および、エラー発生時にテンプレート（`sample_submission`）を模倣するルールを追記。 |
+| `LOG.md` | 🟡 軽微 | 本変更ログを追記。 |
+
+### 3. 検証結果
+- `git diff --stat main` の確認により、`agents_draft/` に存在していた不完全なフォルダ群が完全に削除され、PRブランチの差分がクリーンになったことを確認。
+- `LOG.md` と `AGENTS.md` の変更が整合していることをセルフレビューで確認。
+
+---
+
+## [2026-06-19 00:27] 公式サンプルエージェントのダウンロード・配置先を sample_deck/ へ変更
+
+### 1. 作業概要
+- **公式サンプル配置先の変更**:
+  - Kaggle API を利用してダウンロード・展開される公式サンプルエージェント（Lucario, Abomasnow, Dragapult, Iono）のターゲットディレクトリを、従来の `agents_draft/`（開発作業用フォルダ）から `sample_deck/` へ変更。
+  - ダウンロードされたサンプルは開発者が手動で `agents_draft/` にコピーして改造・開発するフローとしました。
+- **`tests/fetch_samples.py` の修正**:
+  - ダウンロード・解凍ターゲット先を `project_root / "sample_deck"` に更新。
+- **`tests/update_cg.py` の修正**:
+  - `sample_deck/` 内に展開されたエージェントに対しても、共通の `cg` パッケージが自動的に同期・配置されるよう `scan_dirs` に `sample_deck` を追記。
+- **ドキュメントの更新**:
+  - `README.md` のディレクトリ構成図に `sample_deck/` を追記。
+  - `docs/setup.md` のサンプル取得手順内の配置先を `sample_deck/` に更新。
+  - `docs/development_flow.md` に `sample_deck/` の役割（自動ダウンロード先であり、開発時は手動で `agents_draft/` にコピーして使用すること）を追記。
+- **古いサンプルのクリーンアップ**:
+  - 以前に `agents_draft/` にダウンロードされていた古いサンプルフォルダ（`sample_*`）を削除し、開発中フォルダをクリーンな状態に整理。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `tests/fetch_samples.py` | 🟠 重大 | ダウンロード先を `sample_deck/` に変更。 |
+| `tests/update_cg.py` | 🟠 重大 | 同期スキャン対象に `sample_deck/` を追加。 |
+| `README.md` | 🟡 軽微 | ディレクトリ構成図に `sample_deck/` を追記。 |
+| `docs/setup.md` | 🟡 軽微 | セットアップ手順の配置先記述を `sample_deck/` に更新。 |
+| `docs/development_flow.md` | 🟡 軽微 | エージェント管理フォルダ構造に `sample_deck/` の役割を追加。 |
+| `LOG.md` | 🟡 軽微 | 本変更ログを追記。 |
+
+### 3. 検証結果
+- Docker コンテナ内でのサンプル取得スクリプト実行：
+  - `python3 tests/fetch_samples.py` を実行し、全4つの公式サンプルがエラーなく `sample_deck/` にダウンロード、解凍されることを確認。
+  - `update_cg.py` の同期処理により、`sample_deck/sample_*` 配下に `cg/` フォルダが正しく配置されることを確認。
+- ドライランテストの実行：
+  - `python tests/dry_run.py` を実行し、移動後もすべてのエージェントがインポートエラーを起こすことなく、正常に動作テストを通過することを確認。
+
+---
+
+## [2026-06-19 00:20] エージェントインポート時のカレントディレクトリ（CWD）制御の追加
+
+### 1. 作業概要
+- **エージェントロード時の CWD 副作用によるインポートエラーの修正**:
+  - `tests/dry_run.py` 実行時に、公式サンプルエージェントが `FileNotFoundError: [Errno 2] No such file or directory: '/kaggle_simulations/agent/deck.csv'` を吐いてクラッシュする不具合を修正。
+  - 原因は、公式サンプルエージェントの `main.py` のモジュール直下に、ローカルでの `deck.csv` ロードに失敗した際に `/kaggle_simulations/agent/` の絶対パスへフォールバックする初期化処理があり、これがインポート時（モジュールのロード時）に実行されていたため。
+  - 対策として、`tests/utils.py` の `load_agent` 関数でのエージェントインポート（`exec_module`）実行中、一時的に CWD をエージェントのディレクトリに切り替え、インポート後に元に戻す `try-finally` 制御を追加。これにより、インポート時の `deck.csv` ロードを安全にローカルで成立させました。
+  - 合わせて、`sample_submission` などの共通依存フォルダを親ディレクトリ方向へ遡って自動探索するロジックを導入し、階層構造に依存しない堅牢なロード処理へ強化しました。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `tests/utils.py` | 🟠 重大 | `load_agent` 実行中の CWD 切り替え処理の追加、および共通インポートフォルダの自動探索ロジックの改善。 |
+| `LOG.md` | 🟡 軽微 | 本日のロード時 CWD 制御バグ修正のログを追記。 |
+
+### 3. 検証結果
+- Docker コンテナ内での `python tests/dry_run.py` を再実行。
+- 検出された全5つのエージェント（`sample_abomasnow`, `sample_dragapult`, `sample_iono`, `sample_lucario`, `latest_submission`）の動作検証（ドライラン）が、**エラー 0 件で完全に大成功（Passed: 5, Failed: 0）**して正常終了することを確認。
+
+---
+
+## [2026-06-19 00:15] Kaggle API の直書きアクセストークン（access_token）対応と例外ハンドリング改善
+
+### 1. 作業概要
+- **直書きアクセストークン (`access_token`) への対応**:
+  - `kaggle.json` (JSON) ではなく、アクセストークンが直書きされた単一のテキストファイル `access_token` を用いる認証環境に完全対応。
+  - `tests/fetch_samples.py` の実行時、マウントまたは配置された `access_token` ファイルを自動検知して中身をロードし、Kaggle API の認証に必要な環境変数 `KAGGLE_KEY` に動的設定する処理を追加。
+  - `KAGGLE_USERNAME` が環境変数に設定されていない場合は、Kaggle API クライアント of 初期化を成立させるため、デフォルトのフォールバックユーザー名 (`dice-2004`) を自動セットする仕組みを導入。
+- **認証エラー案内メッセージの刷新**:
+  - 認証キーが見つからない場合の案内ガイド (`print_auth_guidance`) および `docs/setup.md` 内の記述を、`kaggle.json` ではなく `access_token` を配置するように指示する記述に修正・統一。
+- **パッケージインストール確認の例外処理分離**:
+  - `tests/fetch_samples.py` 内で、パッケージインストール確認と認証（`kaggle.json` や `access_token` の有無）の判定を分離。
+  - インストール有無は `import kaggle` のみで判定し、認証不足による例外発生時は「インストール失敗」と誤認させずに、親切な認証案内ガイドへ正しく誘導されるよう例外処理を改善。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `tests/fetch_samples.py` | 🟠 重大 | `access_token` の自動読み込み処理の追加、および認証案内メッセージを `access_token` 仕様に修正。例外処理の改善。 |
+| `docs/setup.md` | 🟡 軽微 | 認証キーの事前準備手順を `access_token` を配置する記述へ修正・更新。 |
+| `LOG.md` | 🟡 軽微 | 本日の Kaggle API トークン対応と例外ハンドリング改善のログを追記。 |
+
+### 3. 検証結果
+1. **マウントなし実行（認証エラー確認）**:
+   - `Successfully installed kaggle package` が正常に出力されたあと、新しく刷新された「access_token の配置を指示する親切なエラー案内」が出力されて終了（exit 1）することを確認。
+2. **`access_token` マウント実行（成功検証）**:
+   - `docker run --rm -v $(pwd):/workspace -w /workspace -v ~/.kaggle:/root/.kaggle:ro ptcg-dev:latest python3 tests/fetch_samples.py` を実行。
+   - `Loaded Kaggle API token from /root/.kaggle/access_token` と正常に検出され、Kaggle API の初期化と認証を完全にパス。
+   - 公式のサンプルエージェント4点（Lucario, Abomasnow, Dragapult, Iono）のダウンロード、解凍、および `update_cg.py` による `cg` パッケージの自動同期までの一連の処理が**エラー 0 件で完全に大成功**することを確認。
+
+---
+
+## [2026-06-18 23:55] プロジェクト開発ドキュメントの整理と再編成
+
+### 1. 作業概要
+- リポジトリ内の情報重複と散在を解決するため、ユーザーに提示された5つの見出し方針に基づいてプロジェクト内の開発マニュアルおよび仕様書を整理・統合。
+  - ① `README.md` をポータル化し、簡潔なクイックスタートと各詳細ドキュメントへのリンクに刷新。
+  - ② 開発環境のセットアップ詳細を `docs/setup.md` に集約。
+  - ③ 動作検証、対戦ベンチマーク、可視化ツールの実行方法を `docs/testing_and_execution.md` に集約。
+  - ④ プルリクエスト（PR）からマージまでの CI/CD プロセスと GitHub 設定を `docs/ci_cd_actions.md` に集約。
+  - ⑤ ブランチの切り方規約（`feature/**`, `fix/**`など）、3層フォルダ構造、実装上の制約、Kaggle提出パッケージ作成手順を `docs/development_flow.md` に集約。
+- `docs/` ディレクトリ内に点在していた古い不要な仕様書（5ファイル）をクリーンアップのために削除。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `README.md` | 🟠 重大 | 全体ポータル目次、ディレクトリ構成、クイックスタートに記述を刷新。 |
+| `docs/setup.md` | 🟢 新規 | Docker/Devcontainer環境構築手順、公式サンプルエージェント自動取得手順を整理。 |
+| `docs/testing_and_execution.md` | 🟢 新規 | ドライラン、並列ベンチマーク、バトルGUI可視化、ローカル静的検証コマンドを整理。 |
+| `docs/ci_cd_actions.md` | 🟢 新規 | CI検証、勝率ベンチマーク自動レポート、マージ時自動移動アクション、GitHub権限設定を整理。 |
+| `docs/development_flow.md` | 🟢 新規 | ブランチ戦略・命名規約、3層エージェント構造、Kaggle時間制約、提出パッケージ作成手順を整理。 |
+| `docs/*.md` (古い5ファイル) | 🔴 削除 | 古くなった個別仕様書を削除し、新規ドキュメント群に完全統合。 |
+| `LOG.md` | 🟡 軽微 | 本日のドキュメント再編成のログを追記。 |
+
+### 3. 検証結果
+- 新ドキュメントの追加と不要ファイルの削除完了後、ローカルの Docker 環境上で `black --check` および `mypy` 検査を実行し、競合や構文・フォーマット上のエラーが一切ないこと（Success）を確認済み。
+
+---
+
 ## [2026-06-18 22:45] GitHub Actions PR検証でのモジュール重複エラー（Mypy）、表示バグ、フォーマットの修正
 
 ### 1. 作業概要
