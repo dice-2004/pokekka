@@ -28,22 +28,22 @@ jobs:
       run: |
         echo "Checking libcg.so shared library dependencies..."
         ldd sample_submission/cg/libcg.so || true
-        for cg_so in $(find agents -name "libcg.so" 2>/dev/null); do
+        for cg_so in $(find agents agents_draft latest_submission -name "libcg.so" 2>/dev/null); do
           ldd "$cg_so" || true
         done
 
     - name: Run Black formatter check
       run: |
-        black --check sample_submission/main.py tests/ $(find agents -name "*.py" -not -path "*/cg/*" 2>/dev/null || true)
+        black --check sample_submission/main.py latest_submission/main.py tests/ $(find agents_draft agents latest_submission -name "*.py" -not -path "*/cg/*" 2>/dev/null || true)
 
     - name: Run Flake8 linter
       run: |
-        flake8 sample_submission/main.py tests/ $(find agents -name "*.py" -not -path "*/cg/*" 2>/dev/null || true) --count --select=E9,F63,F7,F82 --show-source --statistics
-        flake8 sample_submission/main.py tests/ $(find agents -name "*.py" -not -path "*/cg/*" 2>/dev/null || true) --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        flake8 sample_submission/main.py latest_submission/main.py tests/ $(find agents_draft agents latest_submission -name "*.py" -not -path "*/cg/*" 2>/dev/null || true) --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 sample_submission/main.py latest_submission/main.py tests/ $(find agents_draft agents latest_submission -name "*.py" -not -path "*/cg/*" 2>/dev/null || true) --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
     - name: Run Mypy type checker
       run: |
-        mypy sample_submission/main.py tests/ $(find agents -name "*.py" -not -path "*/cg/*" 2>/dev/null || true) --ignore-missing-imports --follow-imports=silent --explicit-package-bases
+        mypy sample_submission/main.py latest_submission/main.py tests/ $(find agents_draft agents latest_submission -name "*.py" -not -path "*/cg/*" 2>/dev/null || true) --ignore-missing-imports --follow-imports=silent --explicit-package-bases
 
     - name: Run Dry Run validation match
       run: |

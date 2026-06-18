@@ -26,40 +26,95 @@ def temporary_sys_path(paths: list[str]):
                 pass
 
 
-def discover_agents(project_root: str) -> dict[str, str]:
+def _is_valid_agent_dir(path: str) -> bool:
+    """ディレクトリが有効なエージェントフォルダかを判定する。
+
+    有効条件: 直下に ``main.py`` と ``deck.csv`` が存在すること。
+    """
+    return os.path.isdir(path) and os.path.isfile(
+        os.path.join(path, "main.py")
+    ) and os.path.isfile(os.path.join(path, "deck.csv"))
+
+
+def _scan_agent_subfolders(
+    parent_dir: str,
+    key_prefix: str,
+) -> dict[str, str]:
+    """親ディレクトリ直下のサブフォルダから有効なエージェントを収集する。
+
+    Args:
+        parent_dir: 走査対象の親ディレクトリ (例: ``agents_draft/``)。
+        key_prefix: 返却辞書のキーに付与するプレフィックス
+                    (例: ``"draft"`` → ``"draft/{name}"``)。
+
+    Returns:
+        dict[str, str]: ``"{prefix}/{name}"`` → 絶対パスのマッピング。
+    """
+    results: dict[str, str] = {}
+    if not os.path.isdir(parent_dir):
+        return results
+
+    for item in sorted(os.listdir(parent_dir)):
+        item_path = os.path.join(parent_dir, item)
+        if _is_valid_agent_dir(item_path):
+            results[f"{key_prefix}/{item}"] = item_path
+    return results
+
+
+def discover_agents(
+    project_root: str,
+    *,
+    include_draft: bool = True,
+    include_completed: bool = True,
+    include_submission: bool = True,
+    include_sample: bool = False,
+) -> dict[str, str]:
     """リポジトリ内の有効なエージェントフォルダを検出する。
 
-    有効なエージェントフォルダとは、直下に `main.py`、`deck.csv` が存在する
-    `sample_submission` または `agents/` 配下のディレクトリです。
+    3層エージェントディレクトリ構造に対応しています。
+
+    - ``agents_draft/``    — 作業中エージェント (キー: ``draft/{name}``)
+    - ``agents/``          — 完成済みエージェント (キー: ``completed/{name}``)
+    - ``latest_submission/`` — 提出予定エージェント (キー: ``latest_submission``)
+    - ``sample_submission/`` — テンプレート (キー: ``sample_submission``)
+
+    各カテゴリの検出はフラグで個別に制御できます。
 
     Args:
         project_root: プロジェクトのルートディレクトリパス。
+        include_draft: ``agents_draft/`` を検出対象に含める。
+        include_completed: ``agents/`` を検出対象に含める。
+        include_submission: ``latest_submission/`` を検出対象に含める。
+        include_sample: ``sample_submission/`` を検出対象に含める。
 
     Returns:
-        dict[str, str]: エージェント名 (ディレクトリのベース名) から
-                       そのエージェントの絶対パスへのマッピング。
+        dict[str, str]: エージェント識別名からそのエージェントの
+                       絶対パスへのマッピング。
     """
-    agents = {}
+    agents: dict[str, str] = {}
     abs_root = os.path.abspath(project_root)
 
-    # 1. sample_submission の確認
-    sample_dir = os.path.join(abs_root, "sample_submission")
-    if os.path.exists(os.path.join(sample_dir, "main.py")) and os.path.exists(
-        os.path.join(sample_dir, "deck.csv")
-    ):
-        agents["sample_submission"] = sample_dir
+    # 1. agents_draft/ 配下 (作業中)
+    if include_draft:
+        draft_dir = os.path.join(abs_root, "agents_draft")
+        agents.update(_scan_agent_subfolders(draft_dir, "draft"))
 
-    # 2. agents/ 配下の確認
-    agents_parent = os.path.join(abs_root, "agents")
-    if os.path.exists(agents_parent) and os.path.isdir(agents_parent):
-        for item in os.listdir(agents_parent):
-            item_path = os.path.join(agents_parent, item)
-            if os.path.isdir(item_path):
-                # 直下に main.py と deck.csv があるか確認
-                if os.path.exists(
-                    os.path.join(item_path, "main.py")
-                ) and os.path.exists(os.path.join(item_path, "deck.csv")):
-                    agents[item] = item_path
+    # 2. agents/ 配下 (完成済み)
+    if include_completed:
+        completed_dir = os.path.join(abs_root, "agents")
+        agents.update(_scan_agent_subfolders(completed_dir, "completed"))
+
+    # 3. latest_submission/ (提出予定)
+    if include_submission:
+        submission_dir = os.path.join(abs_root, "latest_submission")
+        if _is_valid_agent_dir(submission_dir):
+            agents["latest_submission"] = submission_dir
+
+    # 4. sample_submission/ (テンプレート)
+    if include_sample:
+        sample_dir = os.path.join(abs_root, "sample_submission")
+        if _is_valid_agent_dir(sample_dir):
+            agents["sample_submission"] = sample_dir
 
     return agents
 

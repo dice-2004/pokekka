@@ -2,6 +2,34 @@
 
 本ファイルは、プロジェクト開発における変更履歴、実装意図、検証結果を記録するログファイルです。
 
+## [2026-06-18 19:50] 3層エージェントフォルダ管理（作業中/完成/提出予定）およびマージ時自動アーカイブの導入
+
+### 1. 作業概要
+- チーム開発の混乱を避けるため、エージェントを3つの階層（`agents_draft/`（開発中）、`agents/`（完成済み）、`latest_submission/`（提出予定））に分類するディレクトリ管理構造へ刷新。
+- PR時は `agents_draft/` 内の変更されたエージェントと `latest_submission/` (提出予定) をベンチマーク対戦させるように CI フローを更新。
+- PRマージ時に、変更が検出された作業中エージェントを `agents_draft/` から `agents/` へ自動で移動（コピー＋削除）するGitHub Actionsワークフロー `archive_agent.yml` を新規作成。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `agents_draft/` | 🟢 新規 | 開発中の作業用ディレクトリを新設。`.gitkeep` を配置。 |
+| `latest_submission/` | 🟢 新規 | 提出予定の最強候補エージェント格納ディレクトリ。`sample_submission` からコピーして初期配置。 |
+| `tests/utils.py` | 🟠 重大 | `discover_agents` を拡張し、`agents_draft/`, `agents/`, `latest_submission/` の3層に対応。 |
+| `tests/update_cg.py` | 🟠 重大 | cg 同期対象に `agents_draft/` と `latest_submission/` を追加。 |
+| `tests/dry_run.py` | 🟠 重大 | エージェント走査に `--include-completed` オプションを追加。デフォルトでは完成済み (`agents/`) を除外するようにし、CI実行時間を最適化。 |
+| `.github/workflows/ci.yml` | 🟠 重大 | 静的解析 (Black, Flake8, Mypy) および Dry Run の検証対象パスを新構造に合わせて更新。 |
+| `.github/workflows/benchmark.yml` | 🟠 重大 | PRトリガー時の対戦相手を常に `main`ブランチの `latest_submission` とするよう対戦ロジックを更新。 |
+| `.github/workflows/archive_agent.yml` | 🟢 新規 | マージされた差分を検知し、対象の作業中エージェントを完成済み `agents/` に移動（コピー＋削除）して自動コミット＆プッシュするワークフロー。 |
+| `.agents/AGENTS.md` | 🟡 軽微 | 開発ガイドラインに3層エージェント構造およびマージ時自動アーカイブのルールを追記。 |
+| `LOG.md` | 🟡 軽微 | 本日の作業内容と検証結果をログへ記録。 |
+
+### 3. 検証結果
+- Docker コンテナ（`ptcg-dev:latest`）を起動し、マウントしたワークスペース内で `update_cg.py` による一斉同期テストが成功することを確認。
+- `tests/dry_run.py` を実行し、`draft/dummy_draft` と `latest_submission` の2つが自動検出されてエラーなく完了することを確認。
+- `tests/benchmark.py` を実行し、`draft/dummy_draft` vs `latest_submission` の2対戦ベンチマークが正常終了することを確認。
+
+---
+
 ## [2026-06-18 16:55] PR CIエラー（Mypy重複エラー、Black未フォーマットエラー）の解消
 
 ### 1. 作業概要

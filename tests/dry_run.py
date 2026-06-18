@@ -120,7 +120,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Dry run Pokémon TCG agents.")
     parser.add_argument(
         "--agent-dir",
-        help="Path to specific agent directory (e.g. agents/rules_baseline)",
+        help="Path to specific agent directory (e.g. agents_draft/my_agent)",
+    )
+    parser.add_argument(
+        "--include-completed",
+        action="store_true",
+        help="Include completed agents in agents/ directory during automatic discovery.",
     )
     args = parser.parse_args()
 
@@ -135,7 +140,10 @@ def main() -> None:
         sys.exit(0 if success else 1)
     else:
         # すべてのエージェントを自動検出して一括検証
-        agents = discover_agents(project_root)
+        agents = discover_agents(
+            project_root,
+            include_completed=args.include_completed,
+        )
         if not agents:
             print("No active agents found in agents/ or sample_submission/.")
             sys.exit(1)

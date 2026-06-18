@@ -1,77 +1,114 @@
 """cg フォルダ同期スクリプト
 
-共通の `sample_submission/cg/` ディレクトリ配下のファイルを、
-`agents/` 配下のすべてのアクティブなエージェントフォルダへ同期・上書きコピーします。
+共通の ``sample_submission/cg/`` ディレクトリ配下のファイルを、
+3層エージェントディレクトリ構造のすべてのアクティブなエージェントフォルダへ
+同期・上書きコピーします。
+
+同期先:
+  - ``agents_draft/*/cg/``
+  - ``agents/*/cg/``
+  - ``latest_submission/cg/``
 """
 
 import os
 import shutil
 import sys
 
-# プロジェクトルートを sys.path に追加して utils をロード
+# プロジェクトルートを算出
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
 
-from tests.utils import discover_agents  # noqa: E402
+
+def _collect_sync_targets() -> list[tuple[str, str]]:
+    """同期対象のエージェントディレクトリを収集する。
+
+    ``discover_agents()`` を使わず、直接ディレクトリ構造をスキャンする。
+    ``sample_submission/`` はコピー元なので同期対象に含めない。
+
+    Returns:
+        list[tuple[str, str]]: ``(表示名, 絶対パス)`` のリスト。
+    """
+    targets: list[tuple[str, str]] = []
+
+    # agents_draft/ と agents/ 配下のサブフォルダ
+    scan_dirs = [
+        ("agents_draft", "draft"),
+        ("agents", "completed"),
+    ]
+    for dir_name, label in scan_dirs:
+        parent = os.path.join(project_root, dir_name)
+        if not os.path.isdir(parent):
+            continue
+        for item in sorted(os.listdir(parent)):
+            item_path = os.path.join(parent, item)
+            if os.path.isdir(item_path):
+                targets.append((f"{label}/{item}", item_path))
+
+    # latest_submission/
+    submission_dir = os.path.join(project_root, "latest_submission")
+    if os.path.isdir(submission_dir):
+        targets.append(("latest_submission", submission_dir))
+
+    return targets
+
+
+def _collect_source_files(source_cg_dir: str) -> list[str]:
+    """コピー元の cg ディレクトリ内の同期対象ファイルを相対パスで列挙する。
+
+    ``__pycache__`` 配下は除外する。
+    """
+    files: list[str] = []
+    for root, _dirs, filenames in os.walk(source_cg_dir):
+        if "__pycache__" in root:
+            continue
+        for fname in filenames:
+            full_path = os.path.join(root, fname)
+            files.append(os.path.relpath(full_path, source_cg_dir))
+    return files
 
 
 def sync_cg_folders() -> None:
+    """sample_submission/cg/ を全エージェントフォルダへ同期する。"""
     source_cg_dir = os.path.join(project_root, "sample_submission", "cg")
-    if not os.path.exists(source_cg_dir):
+    if not os.path.isdir(source_cg_dir):
         print(f"Error: Source cg directory not found at {source_cg_dir}")
         sys.exit(1)
 
-    print("Discovering active agents...")
-    agents = discover_agents(project_root)
-
-    # 同期対象のファイルリストを取得
-    files_to_sync = []
-    for root, dirs, files in os.walk(source_cg_dir):
-        # __pycache__ は同期対象外
-        if "__pycache__" in root:
-            continue
-        for file in files:
-            full_path = os.path.join(root, file)
-            rel_path = os.path.relpath(full_path, source_cg_dir)
-            files_to_sync.append(rel_path)
-
+    files_to_sync = _collect_source_files(source_cg_dir)
     print(f"Found {len(files_to_sync)} files to synchronize from {source_cg_dir}.")
 
+    targets = _collect_sync_targets()
+    if not targets:
+        print("No sync targets found.")
+        sys.exit(0)
+
+    print(f"Discovered {len(targets)} sync targets.")
+
     success_count = 0
-    synced_agents = []
+    synced_agents: list[str] = []
 
-    for agent_name, agent_dir in agents.items():
-        # sample_submission はコピー元なので同期対象から除外
-        if agent_name == "sample_submission":
-            continue
-
+    for agent_name, agent_dir in targets:
         target_cg_dir = os.path.join(agent_dir, "cg")
-        print(f"Syncing to agent: {agent_name} -> {target_cg_dir}")
+        print(f"Syncing to: {agent_name} -> {target_cg_dir}")
 
-        # ディレクトリがない場合は作成
         os.makedirs(target_cg_dir, exist_ok=True)
 
         try:
-            # 既存のターゲット cg 内の不要なファイルを削除 (クリーンアップ)
-            for root, dirs, files in os.walk(target_cg_dir):
+            # 不要ファイルのクリーンアップ
+            for root, _dirs, files in os.walk(target_cg_dir):
                 if "__pycache__" in root:
                     continue
-                for file in files:
-                    full_target_file = os.path.join(root, file)
-                    rel_target_file = os.path.relpath(full_target_file, target_cg_dir)
-                    if rel_target_file not in files_to_sync:
-                        os.remove(full_target_file)
-                        print(f"  Removed obsolete file: {rel_target_file}")
+                for fname in files:
+                    full_target = os.path.join(root, fname)
+                    rel_target = os.path.relpath(full_target, target_cg_dir)
+                    if rel_target not in files_to_sync:
+                        os.remove(full_target)
+                        print(f"  Removed obsolete file: {rel_target}")
 
-            # コピー実行
+            # ファイルコピー
             for rel_file in files_to_sync:
                 src_file = os.path.join(source_cg_dir, rel_file)
                 dst_file = os.path.join(target_cg_dir, rel_file)
-
-                # 必要なら親ディレクトリを作成
                 os.makedirs(os.path.dirname(dst_file), exist_ok=True)
-
                 shutil.copy2(src_file, dst_file)
 
             success_count += 1
@@ -82,13 +119,14 @@ def sync_cg_folders() -> None:
     print("\n" + "=" * 50)
     print(" Synchronization Completed")
     print("=" * 50)
-    print(f"Successfully synced: {success_count} agents")
+    print(f"Successfully synced: {success_count} targets")
     if synced_agents:
-        print(f"Agents updated:      {', '.join(synced_agents)}")
+        print(f"Targets updated:     {', '.join(synced_agents)}")
     else:
-        print("No active agents found in agents/ to update.")
+        print("No targets were updated.")
     print("=" * 50)
 
 
 if __name__ == "__main__":
     sync_cg_folders()
+

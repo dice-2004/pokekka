@@ -4,8 +4,8 @@ on:
   pull_request:
     branches: [ main ]
     paths:
-      - 'sample_submission/**'
-      - 'agents/**'
+      - 'agents_draft/**'
+      - 'latest_submission/**'
   workflow_dispatch:
     inputs:
       mode:
@@ -18,13 +18,13 @@ on:
           - 'baseline'
         default: 'individual'
       agent_a:
-        description: 'Path to agent A (or Baseline) file (e.g. agents/rules_baseline/main.py)'
+        description: 'Path to agent A (or Baseline) file (e.g. agents_draft/my_agent/main.py)'
         required: false
-        default: 'sample_submission/main.py'
+        default: 'agents_draft/'
       agent_b:
-        description: 'Path to agent B file (e.g. sample_submission/main.py)'
+        description: 'Path to agent B file (e.g. latest_submission/main.py)'
         required: false
-        default: 'sample_submission/main.py'
+        default: 'latest_submission/main.py'
       matches:
         description: 'Number of matches to play (per pair/matchup)'
         required: true
@@ -134,29 +134,34 @@ jobs:
           fi
           
         else
-          # PR Trigger: Scan git diff for the changed agent folder
+          # PR Trigger: Scan git diff for changed agent folders
           cd pr_branch
           
-          # Find directory starting with sample_submission/ or agents/
-          CHANGED_DIR=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} | grep -E "(^agents/[^/]+/|^sample_submission/)" | cut -d'/' -f1-2 | sort -u | head -n 1)
+          # Detect changes in agents_draft/ and latest_submission/
+          CHANGED_DRAFT=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} | grep -E '^agents_draft/[^/]+/' | cut -d'/' -f1-2 | sort -u | head -n 1 || true)
+          CHANGED_LATEST=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} | grep -E '^latest_submission/' | head -n 1 || true)
           
           cd ..
           
-          if [ -z "$CHANGED_DIR" ]; then
-            CHANGED_DIR="sample_submission"
-          fi
-          
-          echo "Detected changed agent directory: $CHANGED_DIR"
-          
-          AGENT_A_PATH="pr_branch/${CHANGED_DIR}/main.py"
-          
-          # Check if target branch has the same agent file to compare, otherwise fallback to standard sample agent
-          if [ -f "main_branch/${CHANGED_DIR}/main.py" ]; then
-            AGENT_B_PATH="main_branch/${CHANGED_DIR}/main.py"
-            B_LABEL="Base（現在のmainブランチの同エージェント）"
+          if [ -n "$CHANGED_DRAFT" ]; then
+            # agents_draft/ に変更あり: PR版 agents_draft vs main版 latest_submission
+            echo "Detected changed draft agent: $CHANGED_DRAFT"
+            AGENT_A_PATH="pr_branch/${CHANGED_DRAFT}/main.py"
+            AGENT_B_PATH="main_branch/latest_submission/main.py"
+            A_LABEL="${CHANGED_DRAFT}/main.py"
+            B_LABEL="Base（現在のmainブランチのlatest_submission）"
+          elif [ -n "$CHANGED_LATEST" ]; then
+            # latest_submission/ のみ変更: PR版 latest_submission vs main版 latest_submission
+            echo "Detected changes in latest_submission only"
+            AGENT_A_PATH="pr_branch/latest_submission/main.py"
+            AGENT_B_PATH="main_branch/latest_submission/main.py"
+            A_LABEL="latest_submission/main.py (PR)"
+            B_LABEL="Base（現在のmainブランチのlatest_submission）"
           else
-            AGENT_B_PATH="main_branch/sample_submission/main.py"
-            B_LABEL="Base（現在のmainブランチの標準サンプルエージェント）"
+            echo "No relevant agent changes detected, skipping benchmark."
+            echo "### ⏭️ ベンチマークスキップ" > comment.md
+            echo "agents_draft/ および latest_submission/ に変更が検出されなかったため、ベンチマークをスキップしました。" >> comment.md
+            exit 0
           fi
           
           echo "Agent A (PR): $AGENT_A_PATH"
@@ -174,12 +179,12 @@ jobs:
           
           # Generate Markdown comment
           echo "### 📊 対戦AI 自動ベンチマーク結果" > comment.md
-          echo "検出された変更エージェント \`${CHANGED_DIR}\` の対戦勝率変化を測定しました（20対戦）。" >> comment.md
+          echo "変更エージェントの対戦勝率変化を測定しました（20対戦）。" >> comment.md
           echo "" >> comment.md
           echo "| エージェント | パス | 勝率 |" >> comment.md
           echo "| --- | --- | --- |" >> comment.md
-          echo "| **PR（今回実装）** | \`${CHANGED_DIR}/main.py\` | **$A_RATE%** |" >> comment.md
-          echo "| **Base（現在のmain）** | \`${AGENT_B_PATH#main_branch/}\` | **$B_RATE%** | (※$B_LABEL)" >> comment.md
+          echo "| **PR（今回実装）** | \`${A_LABEL}\` | **$A_RATE%** |" >> comment.md
+          echo "| **Base（現在のmain）** | \`latest_submission/main.py\` | **$B_RATE%** | (※$B_LABEL)" >> comment.md
           echo "" >> comment.md
           echo "🎬 **対戦ビジュアルHTML**:" >> comment.md
           echo "代表対戦のビジュアルHTMLをビルドArtifactとして生成しました。下部にある \`match-visualization-html\` をダウンロードし、解凍してブラウザで開くことで対戦アニメーションを可視化再生できます。" >> comment.md
