@@ -2,9 +2,12 @@
 
 本ファイルは、プロジェクト開発における変更履歴、実装意図、検証結果を記録するログファイルです。
 
-## [2026-06-18 22:45] GitHub Actions PRコメントのベースラインパス表示修正 & コードフォーマット修正
+## [2026-06-18 22:45] GitHub Actions PR検証でのモジュール重複エラー（Mypy）、表示バグ、フォーマットの修正
 
 ### 1. 作業概要
+- **Mypy モジュール重複エラー（Duplicate module）の解消**:
+  - `.github/workflows/ci.yml` において、`black`, `flake8`, `mypy` 実行時に `latest_submission/main.py` を明示的に引数指定していたのに対し、`find` の結果としても再度同ファイルが検出され、重複引数となっていました。これが原因で Mypy が `Duplicate module named "latest_submission.main"` エラーでビルドを失敗させていました。
+  - 修正として、チェック対象のディレクトリから存在するパスのみを動的に抽出し、重複のない Python ファイルのクリーンな一意リスト (`CHECK_FILES`) を生成した上で各チェックツールを実行するシェルスクリプトに改善しました。これにより、ファイル不在時のパスエラーや重複引数エラーを根本から排除しました。
 - **ベースラインエージェントパス表示の不整合修正**:
   - `.github/workflows/benchmark.yml` において、Baseエージェントのパスが `latest_submission/main.py` にハードコードされていたため、`latest_submission` が main ブランチに存在せず `sample_submission/main.py` にフォールバックした場合でも誤ったパスが表示される問題がありました。
   - これを、実際に解決されたベースラインパス（`AGENT_B_PATH` から `main_branch/` を取り除いたもの）を動的に表示するようシェル変数展開 `${AGENT_B_PATH#main_branch/}` に修正しました。
@@ -14,15 +17,18 @@
 ### 2. 変更・追加されたファイル
 | ファイル | 深刻度 | 変更内容 |
 |---------|--------|---------|
+| `.github/workflows/ci.yml` | 🟠 重大 | `black`, `flake8`, `mypy` の検査対象ファイルリストに重複が発生しないよう動的フィルタリングロジックを導入。 |
 | `.github/workflows/benchmark.yml` | 🟠 重大 | PRコメントに表示されるベースラインのパスを、フォールバック時も正しく反映されるよう変数参照に修正。 |
 | `tests/fetch_samples.py` | 🟡 軽微 | `black` による自動コードフォーマットの適用。 |
 | `LOG.md` | 🟡 軽微 | 今回の修正内容と動作検証結果を追記。 |
 
 ### 3. 検証結果
 - ローカル Docker 環境 (`ptcg-dev:latest`) にて以下の検証を実施し、すべて正常に動作することを確認しました。
-  1. `black --check sample_submission/main.py tests/ $(find agents_draft agents latest_submission -name "*.py" -not -path "*/cg/*" 2>/dev/null || true)` が 100% グリーン（エラー 0 件）でパス。
-  2. `mypy` 静的型チェックが 100% グリーン（エラー 0 件）でパス。
-  3. `python tests/dry_run.py` によるエージェントドライランが 2 エージェント（`draft/sample_submission-a`, `latest_submission`）ともエラーなく正常終了（Passed 2, Failed 0）。
+  1. 重複ファイル排除ロジックの動作検証：`CHECK_FILES` に重複ファイルが含まれないことを確認。
+  2. `black --check $CHECK_FILES` が 100% グリーン（エラー 0 件）でパス。
+  3. `flake8 $CHECK_FILES --count --select=E9,F63,F7,F82 --show-source --statistics` が正常終了。
+  4. `mypy $CHECK_FILES` 静的型チェックが 100% グリーン（エラー 0 件、重複モジュールエラーなし）でパス。
+  5. `python tests/dry_run.py` によるエージェントドライランが 2 エージェント（`draft/sample_submission-a`, `latest_submission`）ともエラーなく正常終了（Passed 2, Failed 0）。
 
 ---
 
