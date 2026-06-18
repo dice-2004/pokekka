@@ -13,7 +13,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from tests.utils import discover_agents
+from tests.utils import discover_agents  # noqa: E402
 
 
 def sync_cg_folders() -> None:
@@ -36,9 +36,7 @@ def sync_cg_folders() -> None:
             rel_path = os.path.relpath(full_path, source_cg_dir)
             files_to_sync.append(rel_path)
 
-    print(
-        f"Found {len(files_to_sync)} files to synchronize from {source_cg_dir}."
-    )
+    print(f"Found {len(files_to_sync)} files to synchronize from {source_cg_dir}.")
 
     success_count = 0
     synced_agents = []
@@ -61,9 +59,7 @@ def sync_cg_folders() -> None:
                     continue
                 for file in files:
                     full_target_file = os.path.join(root, file)
-                    rel_target_file = os.path.relpath(
-                        full_target_file, target_cg_dir
-                    )
+                    rel_target_file = os.path.relpath(full_target_file, target_cg_dir)
                     if rel_target_file not in files_to_sync:
                         os.remove(full_target_file)
                         print(f"  Removed obsolete file: {rel_target_file}")

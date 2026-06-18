@@ -7,7 +7,7 @@
 使用例:
     # すべてのエージェントを一括テスト
     python tests/dry_run.py
-    
+
     # 特定のエージェントを指定してテスト
     python tests/dry_run.py --agent-dir agents/rules_baseline
 """
@@ -22,7 +22,12 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from tests.utils import discover_agents, load_agent, load_deck, temporary_sys_path
+from tests.utils import (
+    discover_agents,
+    load_agent,
+    load_deck,
+    temporary_sys_path,
+)  # noqa: E402
 
 
 def run_dry_test(agent_name: str, agent_dir: str) -> bool:
@@ -82,9 +87,7 @@ def run_dry_test(agent_name: str, agent_dir: str) -> bool:
 
                 # 試合終了判定
                 if obs.current is not None and obs.current.result != -1:
-                    print(
-                        f"Game ended at step {step}. Result: {obs.current.result}"
-                    )
+                    print(f"Game ended at step {step}. Result: {obs.current.result}")
                     break
 
                 # エージェントに選択させる
@@ -92,9 +95,7 @@ def run_dry_test(agent_name: str, agent_dir: str) -> bool:
                 obs_dict = battle_select(action)
                 step += 1
             else:
-                print(
-                    f"Warning: Reached max_steps ({max_steps}) without game ending."
-                )
+                print(f"Warning: Reached max_steps ({max_steps}) without game ending.")
                 return False
 
     except Exception as e:

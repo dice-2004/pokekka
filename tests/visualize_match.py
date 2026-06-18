@@ -19,8 +19,8 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from tests.utils import load_agent, load_deck
-from tests.benchmark import patch_kaggle_environments
+from tests.utils import load_agent, load_deck  # noqa: E402
+from tests.benchmark import patch_kaggle_environments  # noqa: E402
 
 
 def main() -> None:
@@ -77,7 +77,7 @@ def main() -> None:
             print(f"Error loading decks: {e}")
             sys.exit(1)
 
-        print(f"Running match...")
+        print("Running match...")
         print(f"Agent A: {args.agent_a}")
         print(f"Agent B: {args.agent_b}")
 

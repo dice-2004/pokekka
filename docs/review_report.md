@@ -143,4 +143,11 @@
 - **C++ ライブラリの二重ロード衝突によるクラッシュ**:
   - 初回実装時、`dry_run.py` の中で `sys.modules` のキャッシュ（`cg` 関連キー）をクリアする処理を入れていたため、複数のエージェントを連続して読み込む際に `libcg.so` が二重にロードされて static 変数の競合から `buffer full. capacity:7` エラーが発生しました。
   - **対策**: `dry_run.py` から `sys.modules` のクリア処理を削除し、一度ロードされた `cg` モジュールをキャッシュから再利用する設計に変更した結果、クラッシュは完全に解消し、すべてのエージェントが正常に完走するようになりました。
+- **Mypy による "Duplicate module named main" エラー**:
+  - `sample_submission/main.py` と各エージェントの `agents/*/main.py` を同時に mypy で検査する際、名前空間が同じ最上位モジュール `main` になるため、Mypy が重複とみなして落ちていました。
+  - **対策**: `.github/workflows/ci.yml` 内の `mypy` コマンド引数に `--explicit-package-bases` を付与し、かつ PEP 420 名前空間パッケージとして別個のモジュール（例: `agents.rules_baseline.main`）として正確に識別させることで、エラーを解消しました。
+- **Black の未フォーマットエラー**:
+  - 新規作成・変更したスクリプトが一部 Black でフォーマットされておらず、CIの Black formatter check で引っかかっていました。
+  - **対策**: コンテナ内で `black` コマンドを実行し、全 Python ファイルのコードスタイルを再フォーマット・同期させました。
+
 

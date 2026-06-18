@@ -21,14 +21,14 @@ import sys
 import os
 import argparse
 import itertools
-from typing import Callable, Tuple
+from typing import Tuple
 
 # プロジェクトルートを sys.path に追加して utils をロード
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from tests.utils import discover_agents, load_agent, load_deck
+from tests.utils import discover_agents, load_agent, load_deck  # noqa: E402
 
 
 def patch_kaggle_environments() -> None:
@@ -69,9 +69,7 @@ def patch_kaggle_environments() -> None:
         if os.path.exists(src):
             try:
                 # Check if file differs to prevent redundant copies
-                if not os.path.exists(dst) or not filecmp.cmp(
-                    src, dst, shallow=False
-                ):
+                if not os.path.exists(dst) or not filecmp.cmp(src, dst, shallow=False):
                     shutil.copyfile(src, dst)
                     patched = True
             except Exception as e:
@@ -84,9 +82,7 @@ def patch_kaggle_environments() -> None:
             try:
                 shutil.rmtree(pycache_dir)
             except Exception as e:
-                print(
-                    f"Warning: Failed to remove __pycache__ at {pycache_dir}: {e}"
-                )
+                print(f"Warning: Failed to remove __pycache__ at {pycache_dir}: {e}")
         importlib.invalidate_caches()
         print(
             "Successfully patched kaggle-environments with the latest cabt game engine."
@@ -131,9 +127,7 @@ def run_match_series(
         match_decks = [deck_a, deck_b] if a_is_player0 else [deck_b, deck_a]
 
         try:
-            env = make(
-                "cabt", configuration={"decks": match_decks}, debug=False
-            )
+            env = make("cabt", configuration={"decks": match_decks}, debug=False)
             env.run(players)
         except Exception as e:
             print(f"Match {i + 1}: Error - {e}")
@@ -293,11 +287,10 @@ def run_baseline_mode(baseline_path: str, matches_per_pair: int) -> None:
         )
 
         total_completed = a_wins + b_wins + draws
-        win_rate = (
-            (a_wins / total_completed * 100) if total_completed > 0 else 0
-        )
+        win_rate = (a_wins / total_completed * 100) if total_completed > 0 else 0
         print(
-            f"  Result: {name} {a_wins} wins ({win_rate:.1f}%) | {baseline_name} {b_wins} wins | Draws: {draws} | Errors: {errors}"
+            f"  Result: {name} {a_wins} wins ({win_rate:.1f}%) | "
+            f"{baseline_name} {b_wins} wins | Draws: {draws} | Errors: {errors}"
         )
 
         results.append(
@@ -320,19 +313,16 @@ def run_baseline_mode(baseline_path: str, matches_per_pair: int) -> None:
     print("-" * 65)
     for res in results:
         print(
-            f"{res['agent']:<25} | {res['win_rate']:>8.1f}% | {res['wins']:<6} | {res['losses']:<6} | {res['draws']:<6} | {res['errors']:<6}"
+            f"{res['agent']:<25} | {res['win_rate']:>8.1f}% | "
+            f"{res['wins']:<6} | {res['losses']:<6} | {res['draws']:<6} | {res['errors']:<6}"
         )
     print("=" * 65)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark Pokémon TCG agents.")
-    parser.add_argument(
-        "--agent-a", help="Path to agent A python file (e.g. main.py)"
-    )
-    parser.add_argument(
-        "--agent-b", help="Path to agent B python file (e.g. main.py)"
-    )
+    parser.add_argument("--agent-a", help="Path to agent A python file (e.g. main.py)")
+    parser.add_argument("--agent-b", help="Path to agent B python file (e.g. main.py)")
     parser.add_argument(
         "--matches",
         type=int,
@@ -369,7 +359,9 @@ def main() -> None:
     # Alias cg modules to prevent double-loading libcg.so when agents import cg
     for module_name in list(sys.modules.keys()):
         if module_name.startswith("kaggle_environments.envs.cabt.cg"):
-            suffix = module_name[len("kaggle_environments.envs.cabt.cg") :]
+            suffix = module_name[
+                len("kaggle_environments.envs.cabt.cg") :
+            ]  # noqa: E203
             alias_name = "cg" + suffix
             sys.modules[alias_name] = sys.modules[module_name]
 

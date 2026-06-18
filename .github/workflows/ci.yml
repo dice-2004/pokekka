@@ -43,7 +43,7 @@ jobs:
 
     - name: Run Mypy type checker
       run: |
-        mypy sample_submission/main.py tests/ $(find agents -name "*.py" -not -path "*/cg/*" 2>/dev/null || true) --ignore-missing-imports --follow-imports=silent
+        mypy sample_submission/main.py tests/ $(find agents -name "*.py" -not -path "*/cg/*" 2>/dev/null || true) --ignore-missing-imports --follow-imports=silent --explicit-package-bases
 
     - name: Run Dry Run validation match
       run: |

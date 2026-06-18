@@ -2,6 +2,62 @@
 
 本ファイルは、プロジェクト開発における変更履歴、実装意図、検証結果を記録するログファイルです。
 
+## [2026-06-18 16:55] PR CIエラー（Mypy重複エラー、Black未フォーマットエラー）の解消
+
+### 1. 作業概要
+- PR作成時の GitHub Actions CI が Black のコードスタイル不一致と Mypy の重複モジュール定義エラーで失敗していた問題を調査・解消。
+- Mypy において複数のディレクトリ内にある `main.py` の競合を解消するため、型チェック時の名前空間解決オプションを設定。
+- 未フォーマットの python ファイルを Black で一括フォーマット。他、未使用のインポートや f-string 警告等の Flake8 警告を修正。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `.github/workflows/ci.yml` | 🟠 重大 | mypy 実行オプションに `--explicit-package-bases` を追加し、重複するモジュール名エラーを回避。 |
+| `tests/utils.py` | 🟡 軽微 | 未使用のインポート `glob` および `Any` を削除。 |
+| `tests/dry_run.py` | 🟡 軽微 | インポート順序によるスタイル警告回避のため `noqa` コメントを追加。 |
+| `tests/benchmark.py` | 🟡 軽微 | 未使用インポート `Callable` の削除、printの長すぎる行の折り返し、スタイル警告回避のための `noqa` コメントを追加。 |
+| `tests/visualize_match.py` | 🟡 軽微 | インポート順序の `noqa` コメント追加、プレースホルダー無しの不要な f-string を修正。 |
+| `sample_submission/main.py` | 🟡 軽微 | `obs.select == None` を Pythonic な `obs.select is None` へ修正。 |
+| `agents/rules_baseline/main.py` | 🟡 軽微 | `obs.select == None` を Pythonic な `obs.select is None` へ修正。 |
+
+### 3. 検証結果
+- ローカルの Docker コンテナ内での静的解析（Black format check, Flake8 syntax check, Mypy type check）がすべて 100% グリーンでパスすることを確認。
+
+---
+
+## [2026-06-18 16:35] チーム開発向けの複数エージェント並行開発・対戦検証環境の構築
+
+### 1. 作業概要
+- チームメンバーがそれぞれ独立したフォルダ（`agents/` 配下）で並行開発し、それらを `sample_submission` にコピーすることなく競合なくテスト・対戦させるための仕組みを構築。
+- 異なる `deck.csv` をコピーすることなくロードさせるため、実行時に対象エージェントのディレクトリに一時的に CWD を切り替える CWD & Path Wrapping 機構を導入。
+- 共通の `cg` パッケージが更新された際に一括同期する `update_cg.py` の追加。
+- 動作検証 (`dry_run.py`)、対戦ベンチマーク (`benchmark.py`)、および可視化 (`visualize_match.py`) の複数エージェント対応。
+- 総当たり戦（Round Robin）モード、ベースライン比較モードを新規実装。
+- CI/CD ワークフロー (`ci.yml`, `benchmark.yml`) および開発ガイドライン (`AGENTS.md`) を更新。
+- Dockerコンテナ（`ptcg-dev:latest`）をビルドし、コンテナ内での全テスト動作が正常（エラー 0 件）であることを実機検証。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `tests/utils.py` | 🟢 新規 | エージェント自動検出、CWDラッパー、エージェント・デッキのロード処理を共通化。 |
+| `tests/update_cg.py` | 🟢 新規 | 共通 `cg` フォルダを全エージェントフォルダに一斉同期・上書きコピーするスクリプト。 |
+| `tests/dry_run.py` | 🟠 重大 | 自動検出されたすべてのエージェントフォルダを一括または個別指定で動作テストできるように拡張。C++二重ロードによるクラッシュを防止。 |
+| `tests/benchmark.py` | 🟠 重大 | 個別対戦時にお互いの `deck.csv` を動的ロード。総当たり戦（Round Robin）およびベースライン比較対戦機能を追加。 |
+| `tests/visualize_match.py` | 🟠 重大 | `tests/utils.py` 経由のロードに統一し、複数エージェント間の対戦HTML可視化生成に対応。 |
+| `.github/workflows/ci.yml` | 🟠 重大 | 検査対象に `agents/` 配下を動的に追加。全エージェントの `dry_run.py` 一括実行を組み込み。 |
+| `.github/workflows/benchmark.yml` | 🟠 重大 | 手動実行時に総当たり戦やベースライン戦を選択・起動できるように inputs を拡張。 |
+| `docs/agent_management_specification.md` | 🟢 新規 | 複数エージェント開発環境および対戦検証の仕様書を新設。 |
+| `docs/review_report.md` | 🟡 軽微 | 第2回品質レビュー（C++ライブラリ二重ロード競合と対策など）を追記。 |
+| `.agents/AGENTS.md` | 🟡 軽微 | 複数エージェント構成、ラッパー、同期スクリプトの利用ガイドを追記。 |
+| `LOG.md` | 🟡 軽微 | 本日の作業内容と検証結果をログへ記録。 |
+
+### 3. 検証結果
+- Docker コンテナ内での一括 `dry_run.py`（2エージェント対象）が 0 件エラーで正常にパス。
+- `benchmark.py` を用いた個別対戦、総当たり戦、ベースライン対戦の各テスト対戦がエラーなく終了し、スコア表・順位表が正確に出力されることを確認。
+- `visualize_match.py` による対戦HTMLの生成に成功し、競合エラーが発生しないことを確認。
+
+---
+
 ## [2026-06-18 13:30] PR指摘事項の修正（CWD副作用の排除、未使用import削除、ローカル絶対パスの排除）
 
 ### 1. 作業概要
