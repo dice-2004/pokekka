@@ -12,6 +12,14 @@
 - 以前の仕様書アーティファクトをリポジトリ内の `docs/` ディレクトリにコピーし、メンバー間でのドキュメント共有を容易に改善。
 - `logs/` ディレクトリ内の GitHub Actions ログを検証。`benchmark.yml` のジョブでリポジトリの読み込み権限（`contents: read`）が不足し、チェックアウト時にエラーになる不具合を修正。
 - `sample_submission/cg/sim.py` のフォールバックロジックを修正。Kaggle環境での安全性を 100% 保証するため、不確実なディレクトリ階層の推測を廃止し、ローカル実行時にのみ明示的にセットされる `PTCG_PROJECT_ROOT` 環境変数の有無のみに依存する堅牢な設計へ改善。
+- `.github/workflows/benchmark.yml` に、ベンチマークテストの代表1ゲームを可視化し、HTMLファイルをワークフロー実行完了後に Artifacts（ビルド成果物）としてダウンロードできるようにアップロード処理を追加。
+- PRにおける他のAIからの詳細なフィードバックを反映。
+  - `dry_run.py` の `except` ブロックでの `step` の `UnboundLocalError` の恐れを `locals().get("step", 0)` を用いて安全に解決。
+  - `benchmark.py` と `visualize_match.py` の一時 `deck.csv` コピー先を `project_root` から `os.getcwd()` に変更し、実行カレントディレクトリ依存のバグを修正。
+  - `benchmark.py` の `patch_kaggle_environments` 関数におけるファイル更新判定をファイルサイズ比較から `filecmp.cmp` を用いた内容比較へ改善。
+  - `docs/` 内の仕様書ファイルにおける `dry_run.py` の仕様記述および Devcontainer のスニペットを、現在の実ファイルの内容に揃えて修正。
+  - `.agents/AGENTS.md` の中の `file:///` 絶対パスをリポジトリ相対リンクへ修正。
+  - `docs/project_specification.md` 内の絶対パス `/home/dice/...` を `<project_root>/` プレースホルダへ修正。
 
 ### 2. 修正されたファイルと修正内容
 | ファイル | 深刻度 | 修正内容 |
@@ -21,7 +29,12 @@
 | `sample_submission/cg/sim.py` | 🟠 重大 | 未使用の `sys` 削除。また、Kaggle提出環境での安全性を100%保証するため、環境変数 `PTCG_PROJECT_ROOT` の有無のみに依存するCWD切り替えロジックへ堅牢化。 |
 | `LOG.md` | 🟡 軽微 | ローカル絶対パスのリンクをリポジトリ相対パスに修正。「AGENT.md」表記を「AGENTS.md」へ修正。今回の修正ログの追記。 |
 | `docs/` | 🟡 軽微 | アーティファクト仕様書（4点）をリポジトリ内に複製し、相対パスで参照できるように配置。 |
-| `.github/workflows/benchmark.yml` | 🟠 重大 | `permissions` ブロックに `contents: read` を追加し、チェックアウト時の権限不足エラーを修正。 |
+| `.github/workflows/benchmark.yml` | 🟠 重大 | `permissions` ブロックに `contents: read` を追加し、チェックアウト時の権限不足エラーを修正。また、ベンチマーク対戦結果の代表HTMLをArtifactsとしてアップロードするステップを追加。 |
+| `.agents/AGENTS.md` | 🟡 軽微 | 内包されている絶対パスリンクをリポジトリ相対リンクへ修正。 |
+| `docs/project_specification.md` | 🟡 軽微 | `/home/dice/...` の絶対パスを `<project_root>/` プレースホルダへ置き換え。 |
+| `docs/docker_env_specification.md` | 🟡 軽微 | Devcontainerのsettings/extensionsスニペットを実ファイルと整合。 |
+| `docs/cicd_specification.md` | 🟡 軽微 | `dry_run.py` の説明を cg.game を直接実行する記述に修正。 |
+| `tests/visualize_match.py` | 🟡 軽微 | 一時 `deck.csv` のコピー先を `os.getcwd()` に修正。 |
 
 ### 3. 検証結果
 - `python tests/dry_run.py` および `python tests/benchmark.py --agent-a sample_submission/main.py --agent-b sample_submission/main.py --matches 2` がローカルでエラーなく実行可能であることを確認。

@@ -36,7 +36,7 @@
 ## 2. プロジェクト固有の技術的ガイドライン
 
 ### 2.1 シミュレータ API (cg モジュール) の利用
-- **型安全性の確保**: [api.py](file:///home/dice/programs/pole/sample_submission/cg/api.py) に定義されている `Observation`、`State`、`PlayerState`、`Pokemon` などのデータクラスや、`AreaType`、`EnergyType`、`OptionType` などの Enum を厳密にインポートして使用してください。
+- **型安全性の確保**: [api.py](../sample_submission/cg/api.py) に定義されている `Observation`、`State`、`PlayerState`、`Pokemon` などのデータクラスや、`AreaType`、`EnergyType`、`OptionType` などの Enum を厳密にインポートして使用してください。
 - **選択肢の仕様**: 通常ターンでエージェントが返す値は `list[int]`（選択肢インデックスのリスト）です。
   - 返すリストの長さは `obs.select.minCount` 以上 `obs.select.maxCount` 以下でなければなりません。
   - 重複するインデックスを含めてはいけません。
@@ -83,7 +83,7 @@ with open("scratch/result.html", "w") as f:
 
 ### 3.2 ローカル/CI 環境での検証に関する重要ルール
 - **提出用コード (main.py) の不変更原則**: ローカルや CI でのパス問題を解決するためであっても、提出物となる `sample_submission/main.py` の中にローカルパスをハードコードしたり、Kaggle 提出環境で動かなくなる変更を行ってはならない。
-- **自動パッチ機構の利用**: [tests/benchmark.py](file:///home/dice/programs/pole/tests/benchmark.py) では、実行時に `site-packages` 側の古い `cabt` エンジンをリポジトリ内の最新版で自動上書きコピーする仕組み、および二重ロード防止のためのエイリアス設定、さらに一時的な `deck.csv` のコピーとクリーンアップ処理が実装されている。これらはローカル検証時のみ機能し、提出用のエージェントコードを汚さない安全な仕組みであるため、開発者は安心してそのままベンチマークテストを使用すること。
+- **自動パッチ機構の利用**: [tests/benchmark.py](../tests/benchmark.py) では、実行時に `site-packages` 側の古い `cabt` エンジンをリポジトリ内の最新版で自動上書きコピーする仕組み、および二重ロード防止のためのエイリアス設定、さらに一時的な `deck.csv` のコピーとクリーンアップ処理が実装されている。これらはローカル検証時のみ機能し、提出用のエージェントコードを汚さない安全な仕組みであるため、開発者は安心してそのままベンチマークテストを使用すること。
 
 ---
 

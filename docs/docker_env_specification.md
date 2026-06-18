@@ -62,14 +62,17 @@ VS Code の拡張機能「Dev Containers」を利用して、エディタ設定�
     "vscode": {
       "settings": {
         "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "python.linting.enabled": true,
-        "python.linting.flake8Enabled": true,
-        "python.formatting.provider": "black",
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter",
+          "editor.formatOnSave": true
+        },
         "editor.formatOnSave": true
       },
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "ms-python.flake8",
         "ms-toolsai.jupyter",
         "donjayamanne.githistory"
       ]

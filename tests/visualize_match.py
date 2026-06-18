@@ -71,7 +71,7 @@ def main() -> None:
         deck = [int(line) for line in f.readlines() if line.strip()]
 
     # Copy deck.csv temporarily to CWD to let unmodified agents load it successfully
-    temp_deck_path = os.path.join(project_root, "deck.csv")
+    temp_deck_path = os.path.join(os.getcwd(), "deck.csv")
     temp_copied = False
     if not os.path.exists(temp_deck_path):
         import shutil

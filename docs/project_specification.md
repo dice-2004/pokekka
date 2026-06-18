@@ -25,7 +25,7 @@
 ## 3. ディレクトリ構成と主要ファイル
 
 ```
-/home/dice/programs/pole/
+<project_root>/
 ├── Card_ID List_EN.pdf       # 英語版カードID対応リスト（画像等）
 ├── Card_ID List_JP.pdf       # 日本語版カードID対応リスト（画像等）
 ├── EN_Card_Data.csv          # 英語版カードマスターデータ

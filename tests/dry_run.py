@@ -78,7 +78,8 @@ def main() -> None:
             print(f"Warning: Reached max_steps ({max_steps}) without game ending.")
             sys.exit(1)
     except Exception as e:
-        print(f"Error at step {step}: {e}")
+        current_step = locals().get("step", 0)
+        print(f"Error at step {current_step}: {e}")
         sys.exit(1)
     finally:
         try:

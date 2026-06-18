@@ -64,17 +64,16 @@ def patch_kaggle_environments() -> None:
     ]
     patched = False
 
+    import filecmp
+
     for file_name in files_to_copy:
         src = os.path.join(source_cg_dir, file_name)
         dst = os.path.join(target_cg_dir, file_name)
         if os.path.exists(src):
             try:
-                # size or modification time check
-                if not os.path.exists(dst) or os.path.getsize(src) != os.path.getsize(
-                    dst
-                ):
+                # Check if file differs to prevent redundant copies
+                if not os.path.exists(dst) or not filecmp.cmp(src, dst, shallow=False):
                     shutil.copyfile(src, dst)
-                    os.utime(dst, None)  # Force update timestamp to now
                     patched = True
             except Exception as e:
                 print(f"Warning: Failed to copy {file_name} to {dst}: {e}")
@@ -180,7 +179,7 @@ def main() -> None:
         deck = [int(line) for line in f.readlines() if line.strip()]
 
     # Copy deck.csv temporarily to CWD to let unmodified agents load it successfully
-    temp_deck_path = os.path.join(project_root, "deck.csv")
+    temp_deck_path = os.path.join(os.getcwd(), "deck.csv")
     temp_copied = False
     if not os.path.exists(temp_deck_path):
         import shutil
