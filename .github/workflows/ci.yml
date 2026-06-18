@@ -1,0 +1,74 @@
+name: CI Validation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install black flake8 mypy kaggle-environments
+
+    - name: Verify libcg.so dependencies
+      run: |
+        echo "Checking libcg.so shared library dependencies..."
+        ldd sample_submission/cg/libcg.so || true
+        for cg_so in $(find agents agents_draft latest_submission -name "libcg.so" 2>/dev/null); do
+          ldd "$cg_so" || true
+        done
+
+    - name: Run Black formatter check
+      run: |
+        PATHS="sample_submission/main.py latest_submission tests agents_draft agents"
+        VALID_PATHS=""
+        for p in $PATHS; do
+          if [ -e "$p" ]; then
+            VALID_PATHS="$VALID_PATHS $p"
+          fi
+        done
+        CHECK_FILES=$(find $VALID_PATHS -name "*.py" -not -path "*/cg/*" 2>/dev/null | sort -u | xargs)
+        black --check $CHECK_FILES
+
+    - name: Run Flake8 linter
+      run: |
+        PATHS="sample_submission/main.py latest_submission tests agents_draft agents"
+        VALID_PATHS=""
+        for p in $PATHS; do
+          if [ -e "$p" ]; then
+            VALID_PATHS="$VALID_PATHS $p"
+          fi
+        done
+        CHECK_FILES=$(find $VALID_PATHS -name "*.py" -not -path "*/cg/*" 2>/dev/null | sort -u | xargs)
+        flake8 $CHECK_FILES --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 $CHECK_FILES --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Run Mypy type checker
+      run: |
+        PATHS="sample_submission/main.py latest_submission tests agents_draft agents"
+        VALID_PATHS=""
+        for p in $PATHS; do
+          if [ -e "$p" ]; then
+            VALID_PATHS="$VALID_PATHS $p"
+          fi
+        done
+        CHECK_FILES=$(find $VALID_PATHS -name "*.py" -not -path "*/cg/*" 2>/dev/null | sort -u | xargs)
+        mypy $CHECK_FILES --ignore-missing-imports --follow-imports=silent --explicit-package-bases
+
+    - name: Run Dry Run validation match
+      run: |
+        python tests/dry_run.py

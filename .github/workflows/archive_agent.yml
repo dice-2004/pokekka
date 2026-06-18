@@ -1,0 +1,70 @@
+name: Archive Merged Agent
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'agents_draft/**'
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+
+    - name: Identify and archive changed draft agents
+      run: |
+        CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD || true)
+        echo "Changed files:"
+        echo "$CHANGED_FILES"
+
+        # agents_draft/ 配下のエージェントフォルダ名を抽出
+        DRAFT_AGENTS=$(echo "$CHANGED_FILES" | grep -E '^agents_draft/[^/]+/' | cut -d'/' -f2 | sort -u)
+
+        if [ -z "$DRAFT_AGENTS" ]; then
+          echo "No draft agents were changed in this commit."
+          exit 0
+        fi
+
+        echo "Found draft agents to archive: $DRAFT_AGENTS"
+
+        # Git の設定
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        for agent in $DRAFT_AGENTS; do
+          SRC="agents_draft/$agent"
+          DST="agents/$agent"
+
+          if [ -d "$SRC" ]; then
+            echo "Archiving $SRC to $DST..."
+            
+            # ディレクトリのコピー
+            mkdir -p "agents"
+            cp -r "$SRC" "agents/"
+            
+            # コピー元の削除
+            rm -rf "$SRC"
+            
+            # Gitのステージング
+            git add "$DST"
+            # すでに削除したディレクトリなので git rm -r で追跡から外す
+            git rm -r "$SRC" || true
+          else
+            echo "Directory $SRC does not exist (already deleted or renamed)."
+          fi
+        done
+
+        # コミットとプッシュ
+        if ! git diff --cached --quiet; then
+          git commit -m "ci: archive agent(s) to completed agents [skip ci]"
+          git push
+        else
+          echo "No changes to commit."
+        fi

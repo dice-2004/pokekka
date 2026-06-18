@@ -1,0 +1,223 @@
+name: Agent Battle Benchmark
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'agents_draft/**'
+      - 'latest_submission/**'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Benchmark Mode'
+        required: true
+        type: choice
+        options:
+          - 'individual'
+          - 'round-robin'
+          - 'baseline'
+        default: 'individual'
+      agent_a:
+        description: 'Path to agent A (or Baseline) file (e.g. agents_draft/my_agent/main.py)'
+        required: false
+        default: 'agents_draft/'
+      agent_b:
+        description: 'Path to agent B file (e.g. latest_submission/main.py)'
+        required: false
+        default: 'latest_submission/main.py'
+      matches:
+        description: 'Number of matches to play (per pair/matchup)'
+        required: true
+        default: '20'
+      pr_number:
+        description: 'PR number to post results (optional)'
+        required: false
+        default: ''
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+    - name: Checkout PR/Current branch
+      uses: actions/checkout@v4
+      with:
+        path: pr_branch
+        fetch-depth: 0 # Needed for git diff history
+
+    - name: Checkout target branch (main)
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.base_ref || 'main' }}
+        path: main_branch
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install kaggle-environments
+
+    - name: Run Battle Benchmark
+      id: run_bench
+      run: |
+        # Setup paths depending on trigger event
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # Manual trigger
+          MODE="${{ github.event.inputs.mode }}"
+          MATCHES="${{ github.event.inputs.matches }}"
+          
+          echo "Manual Benchmark requested in '$MODE' mode."
+          
+          if [ "$MODE" = "round-robin" ]; then
+            python pr_branch/tests/benchmark.py --round-robin --matches "$MATCHES" > benchmark_result.txt
+            cat benchmark_result.txt
+            
+            # Generate Markdown comment
+            echo "### 📊 総当たり戦バトルベンチマーク結果" > comment.md
+            echo "アクティブな全エージェント間での総当たり戦を実施しました（各ペア${MATCHES}対戦）。" >> comment.md
+            echo "" >> comment.md
+            echo "\`\`\`text" >> comment.md
+            cat benchmark_result.txt | sed -n '/Tournament Standings/,/============/p' >> comment.md
+            echo "\`\`\`" >> comment.md
+            
+          elif [ "$MODE" = "baseline" ]; then
+            BASELINE_PATH="pr_branch/${{ github.event.inputs.agent_a }}"
+            python pr_branch/tests/benchmark.py --baseline "$BASELINE_PATH" --matches "$MATCHES" > benchmark_result.txt
+            cat benchmark_result.txt
+            
+            # Generate Markdown comment
+            echo "### 📊 ベースライン比較ベンチマーク結果" > comment.md
+            echo "ベースラインエージェント \`${{ github.event.inputs.agent_a }}\` と他エージェントの対戦を実施しました（各ペア${MATCHES}対戦）。" >> comment.md
+            echo "" >> comment.md
+            echo "\`\`\`text" >> comment.md
+            cat benchmark_result.txt | sed -n '/Benchmark Summary/,/============/p' >> comment.md
+            echo "\`\`\`" >> comment.md
+            
+          else
+            AGENT_A_PATH="pr_branch/${{ github.event.inputs.agent_a }}"
+            AGENT_B_PATH="pr_branch/${{ github.event.inputs.agent_b }}"
+            
+            python pr_branch/tests/benchmark.py --agent-a "$AGENT_A_PATH" --agent-b "$AGENT_B_PATH" --matches "$MATCHES" > benchmark_result.txt
+            cat benchmark_result.txt
+            
+            A_RATE=$(grep "SUMMARY:" benchmark_result.txt | sed -e 's/.*A_WIN_RATE=\([0-9.]*\).*/\1/')
+            B_RATE=$(grep "SUMMARY:" benchmark_result.txt | sed -e 's/.*B_WIN_RATE=\([0-9.]*\).*/\1/')
+            
+            # Build match visualization HTML
+            python pr_branch/tests/visualize_match.py --agent-a "$AGENT_A_PATH" --agent-b "$AGENT_B_PATH" --output pr_branch/scratch/benchmark_visualizer.html
+            
+            # Generate Markdown comment
+            echo "### 📊 手動バトルベンチマーク結果" > comment.md
+            echo "指定されたエージェントペアの対戦を実施しました（${MATCHES}対戦）。" >> comment.md
+            echo "" >> comment.md
+            echo "| エージェント | パス | 勝率 |" >> comment.md
+            echo "| --- | --- | --- |" >> comment.md
+            echo "| **Agent A** | \`${{ github.event.inputs.agent_a }}\` | **$A_RATE%** |" >> comment.md
+            echo "| **Agent B** | \`${{ github.event.inputs.agent_b }}\` | **$B_RATE%** |" >> comment.md
+            echo "" >> comment.md
+            echo "🎬 **対戦ビジュアルHTML**:" >> comment.md
+            echo "代表対戦のビジュアルHTMLをビルドArtifactとして生成しました。下部にある \`match-visualization-html\` をダウンロードし、解凍してブラウザで開くことで対戦アニメーションを可視化再生できます。" >> comment.md
+            echo "" >> comment.md
+            echo "<details><summary>🔍 詳細ログの表示</summary>" >> comment.md
+            echo "" >> comment.md
+            echo "\`\`\`text" >> comment.md
+            cat benchmark_result.txt >> comment.md
+            echo "\`\`\`" >> comment.md
+            echo "</details>" >> comment.md
+          fi
+          
+        else
+          # PR Trigger: Scan git diff for changed agent folders
+          cd pr_branch
+          
+          # Detect changes in agents_draft/ and latest_submission/
+          CHANGED_DRAFT=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} | grep -E '^agents_draft/[^/]+/' | cut -d'/' -f1-2 | sort -u | head -n 1 || true)
+          CHANGED_LATEST=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} | grep -E '^latest_submission/' | head -n 1 || true)
+          
+          cd ..
+          
+          if [ -n "$CHANGED_DRAFT" ]; then
+            # agents_draft/ に変更あり: PR版 agents_draft vs main版 latest_submission (または sample_submission)
+            echo "Detected changed draft agent: $CHANGED_DRAFT"
+            AGENT_A_PATH="pr_branch/${CHANGED_DRAFT}/main.py"
+            A_LABEL="${CHANGED_DRAFT}/main.py"
+            if [ -f "main_branch/latest_submission/main.py" ]; then
+              AGENT_B_PATH="main_branch/latest_submission/main.py"
+              B_LABEL="Base（現在のmainブランチのlatest_submission）"
+            else
+              AGENT_B_PATH="main_branch/sample_submission/main.py"
+              B_LABEL="Base（現在のmainブランチのsample_submission - フォールバック）"
+            fi
+          elif [ -n "$CHANGED_LATEST" ]; then
+            # latest_submission/ のみ変更: PR版 latest_submission vs main版 latest_submission (または sample_submission)
+            echo "Detected changes in latest_submission only"
+            AGENT_A_PATH="pr_branch/latest_submission/main.py"
+            A_LABEL="latest_submission/main.py (PR)"
+            if [ -f "main_branch/latest_submission/main.py" ]; then
+              AGENT_B_PATH="main_branch/latest_submission/main.py"
+              B_LABEL="Base（現在のmainブランチのlatest_submission）"
+            else
+              AGENT_B_PATH="main_branch/sample_submission/main.py"
+              B_LABEL="Base（現在のmainブランチのsample_submission - フォールバック）"
+            fi
+          else
+            echo "No relevant agent changes detected, skipping benchmark."
+            echo "### ⏭️ ベンチマークスキップ" > comment.md
+            echo "agents_draft/ および latest_submission/ に変更が検出されなかったため、ベンチマークをスキップしました。" >> comment.md
+            exit 0
+          fi
+          
+          echo "Agent A (PR): $AGENT_A_PATH"
+          echo "Agent B (Base): $AGENT_B_PATH"
+          
+          # Run benchmark (20 matches)
+          python pr_branch/tests/benchmark.py --agent-a "$AGENT_A_PATH" --agent-b "$AGENT_B_PATH" --matches 20 > benchmark_result.txt
+          cat benchmark_result.txt
+          
+          A_RATE=$(grep "SUMMARY:" benchmark_result.txt | sed -e 's/.*A_WIN_RATE=\([0-9.]*\).*/\1/')
+          B_RATE=$(grep "SUMMARY:" benchmark_result.txt | sed -e 's/.*B_WIN_RATE=\([0-9.]*\).*/\1/')
+          
+          # Build match visualization HTML
+          python pr_branch/tests/visualize_match.py --agent-a "$AGENT_A_PATH" --agent-b "$AGENT_B_PATH" --output pr_branch/scratch/benchmark_visualizer.html
+          
+          # Generate Markdown comment
+          echo "### 📊 対戦AI 自動ベンチマーク結果" > comment.md
+          echo "変更エージェントの対戦勝率変化を測定しました（20対戦）。" >> comment.md
+          echo "" >> comment.md
+          echo "| エージェント | パス | 勝率 |" >> comment.md
+          echo "| --- | --- | --- |" >> comment.md
+          echo "| **PR（今回実装）** | \`${A_LABEL}\` | **$A_RATE%** |" >> comment.md
+          echo "| **Base（現在のmain）** | \`${AGENT_B_PATH#main_branch/}\` | **$B_RATE%** | (※$B_LABEL)" >> comment.md
+          echo "" >> comment.md
+          echo "🎬 **対戦ビジュアルHTML**:" >> comment.md
+          echo "代表対戦のビジュアルHTMLをビルドArtifactとして生成しました。下部にある \`match-visualization-html\` をダウンロードし、解凍してブラウザで開くことで対戦アニメーションを可視化再生できます。" >> comment.md
+          echo "" >> comment.md
+          echo "<details><summary>🔍 詳細ログの表示</summary>" >> comment.md
+          echo "" >> comment.md
+          echo "\`\`\`text" >> comment.md
+          cat benchmark_result.txt >> comment.md
+          echo "\`\`\`" >> comment.md
+          echo "</details>" >> comment.md
+        fi
+
+    - name: Comment on PR
+      if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number != '') }}
+      uses: mshick/add-pr-comment@v3
+      with:
+        message-path: comment.md
+        issue: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+
+    - name: Upload Match Visualization HTML Artifact
+      if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'individual') }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: match-visualization-html
+        path: pr_branch/scratch/benchmark_visualizer.html
+        retention-days: 7

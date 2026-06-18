@@ -1,0 +1,29 @@
+{
+  "name": "PTCG AI Battle Challenge Dev Env",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter",
+          "editor.formatOnSave": true
+        },
+        "editor.formatOnSave": true
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "ms-python.flake8",
+        "ms-toolsai.jupyter",
+        "donjayamanne.githistory"
+      ]
+    }
+  },
+  "postCreateCommand": "echo 'Container initialized. Ready for development!'",
+  "remoteUser": "root"
+}
