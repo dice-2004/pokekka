@@ -11,26 +11,20 @@ kaggle-environments の cabt 環境はバージョン差異の影響を受ける
 import sys
 import os
 
-# sample_submission/ を sys.path に追加
-# main.py 内の `from cg.api import ...` が cg パッケージを見つけられるようにする
 _SAMPLE_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "sample_submission")
 )
-if _SAMPLE_DIR not in sys.path:
-    sys.path.insert(0, _SAMPLE_DIR)
-
-# Set PTCG_PROJECT_ROOT for GameInitialize to locate CSVs
-os.environ["PTCG_PROJECT_ROOT"] = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
-# deck.csv の読み取りのため、CWD を sample_submission/ に変更
-_ORIGINAL_CWD = os.getcwd()
-os.chdir(_SAMPLE_DIR)
 
 
 def main() -> None:
-    from main import agent
-    from cg.game import battle_start, battle_select, battle_finish
-    from cg.api import to_observation_class
+    # sample_submission/ を sys.path に追加
+    if _SAMPLE_DIR not in sys.path:
+        sys.path.insert(0, _SAMPLE_DIR)
+
+    # Set PTCG_PROJECT_ROOT for GameInitialize to locate CSVs
+    os.environ["PTCG_PROJECT_ROOT"] = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..")
+    )
 
     # デッキのロード
     deck_path = os.path.join(_SAMPLE_DIR, "deck.csv")
@@ -43,23 +37,31 @@ def main() -> None:
 
     print(f"Deck loaded: {len(deck)} cards")
 
-    # cg.game で直接対戦を開始
-    print("Starting battle...")
-    obs_dict, start_data = battle_start(deck, deck)
-    if obs_dict is None:
-        print(
-            f"Battle start failed. "
-            f"errorPlayer={start_data.errorPlayer}, "
-            f"errorType={start_data.errorType}"
-        )
-        sys.exit(1)
-
-    print("Battle started successfully.")
-
-    step = 0
-    max_steps = 5000  # 無限ループ防止
+    # deck.csv の読み取り・インポート前に CWD を退避し、対戦終了時に確実に復元する
+    original_cwd = os.getcwd()
+    os.chdir(_SAMPLE_DIR)
 
     try:
+        from main import agent
+        from cg.game import battle_start, battle_select, battle_finish
+        from cg.api import to_observation_class
+
+        # cg.game で直接対戦を開始
+        print("Starting battle...")
+        obs_dict, start_data = battle_start(deck, deck)
+        if obs_dict is None:
+            print(
+                f"Battle start failed. "
+                f"errorPlayer={start_data.errorPlayer}, "
+                f"errorType={start_data.errorType}"
+            )
+            sys.exit(1)
+
+        print("Battle started successfully.")
+
+        step = 0
+        max_steps = 5000  # 無限ループ防止
+
         while step < max_steps:
             obs = to_observation_class(obs_dict)
 
@@ -79,8 +81,13 @@ def main() -> None:
         print(f"Error at step {step}: {e}")
         sys.exit(1)
     finally:
-        battle_finish()
-        os.chdir(_ORIGINAL_CWD)
+        try:
+            from cg.game import battle_finish
+
+            battle_finish()
+        except Exception:
+            pass
+        os.chdir(original_cwd)
 
     print(f"Dry run completed successfully. ({step} steps)")
 

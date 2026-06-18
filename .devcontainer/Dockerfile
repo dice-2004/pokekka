@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     mypy \
     ipykernel \
     numpy \
-    pandas
+    pandas && \
+    chmod -R a+w /usr/local/lib/python3.10/site-packages
 
 CMD ["bash"]

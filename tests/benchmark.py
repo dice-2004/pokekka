@@ -43,7 +43,7 @@ def patch_kaggle_environments() -> None:
 
     ke_path = os.path.dirname(spec.origin)
     target_cg_dir = os.path.join(ke_path, "envs", "cabt", "cg")
-    
+
     if not os.path.exists(target_cg_dir):
         return
 
@@ -53,7 +53,15 @@ def patch_kaggle_environments() -> None:
     if not os.path.exists(source_cg_dir):
         return
 
-    files_to_copy = ["libcg.so", "cg.dll", "game.py", "sim.py", "utils.py", "api.py", "__init__.py"]
+    files_to_copy = [
+        "libcg.so",
+        "cg.dll",
+        "game.py",
+        "sim.py",
+        "utils.py",
+        "api.py",
+        "__init__.py",
+    ]
     patched = False
 
     for file_name in files_to_copy:
@@ -62,8 +70,10 @@ def patch_kaggle_environments() -> None:
         if os.path.exists(src):
             try:
                 # size or modification time check
-                if not os.path.exists(dst) or os.path.getsize(src) != os.path.getsize(dst):
-                    shutil.copy(src, dst)
+                if not os.path.exists(dst) or os.path.getsize(src) != os.path.getsize(
+                    dst
+                ):
+                    shutil.copyfile(src, dst)
                     os.utime(dst, None)  # Force update timestamp to now
                     patched = True
             except Exception as e:
@@ -78,7 +88,9 @@ def patch_kaggle_environments() -> None:
             except Exception as e:
                 print(f"Warning: Failed to remove __pycache__ at {pycache_dir}: {e}")
         importlib.invalidate_caches()
-        print("Successfully patched kaggle-environments with the latest cabt game engine.")
+        print(
+            "Successfully patched kaggle-environments with the latest cabt game engine."
+        )
 
 
 def load_agent(path: str) -> Callable:
@@ -119,15 +131,9 @@ def load_agent(path: str) -> Callable:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Benchmark two Pokémon TCG agents."
-    )
-    parser.add_argument(
-        "--agent-a", required=True, help="Path to agent A python file"
-    )
-    parser.add_argument(
-        "--agent-b", required=True, help="Path to agent B python file"
-    )
+    parser = argparse.ArgumentParser(description="Benchmark two Pokémon TCG agents.")
+    parser.add_argument("--agent-a", required=True, help="Path to agent A python file")
+    parser.add_argument("--agent-b", required=True, help="Path to agent B python file")
     parser.add_argument(
         "--matches",
         type=int,
@@ -155,7 +161,7 @@ def main() -> None:
     # Alias cg modules to prevent double-loading libcg.so when agents import cg
     for module_name in list(sys.modules.keys()):
         if module_name.startswith("kaggle_environments.envs.cabt.cg"):
-            suffix = module_name[len("kaggle_environments.envs.cabt.cg"):]
+            suffix = module_name[len("kaggle_environments.envs.cabt.cg") :]
             alias_name = "cg" + suffix
             sys.modules[alias_name] = sys.modules[module_name]
 
@@ -178,6 +184,7 @@ def main() -> None:
     temp_copied = False
     if not os.path.exists(temp_deck_path):
         import shutil
+
         shutil.copy2(deck_path, temp_deck_path)
         temp_copied = True
 
@@ -204,7 +211,7 @@ def main() -> None:
             players = [agent_a, agent_b] if a_is_player0 else [agent_b, agent_a]
 
             try:
-                env = make("cabt", configuration={"decks": [deck, deck]}, debug=True)
+                env = make("cabt", configuration={"decks": [deck, deck]}, debug=False)
                 env.run(players)
             except Exception as e:
                 print(f"Match {i + 1}: Error - {e}")
@@ -227,7 +234,11 @@ def main() -> None:
 
             if reward_0 is None or reward_1 is None:
                 errors += 1
-                error_msg = env.steps[0][0].get("error") if (hasattr(env, "steps") and env.steps) else "Unknown error"
+                error_msg = (
+                    env.steps[0][0].get("error")
+                    if (hasattr(env, "steps") and env.steps)
+                    else "Unknown error"
+                )
                 print(f"Match {i + 1}: Game error. Details: {error_msg}")
                 continue
 
