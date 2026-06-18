@@ -6,7 +6,7 @@
 使用例:
     python tests/visualize_match.py \
         --agent-a sample_submission/main.py \
-        --agent-b sample_submission/main.py \
+        --agent-b agents/rules_baseline/main.py \
         --output scratch/visualizer.html
 """
 
@@ -14,12 +14,13 @@ import sys
 import os
 import argparse
 
-# tests/ ディレクトリを sys.path に追加して benchmark からモジュールをインポート可能にする
-_TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
-if _TESTS_DIR not in sys.path:
-    sys.path.insert(0, _TESTS_DIR)
+# プロジェクトルートを sys.path に追加して utils をロード
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-from benchmark import load_agent, patch_kaggle_environments
+from tests.utils import load_agent, load_deck  # noqa: E402
+from tests.benchmark import patch_kaggle_environments  # noqa: E402
 
 
 def main() -> None:
@@ -56,30 +57,11 @@ def main() -> None:
             alias_name = "cg" + suffix
             sys.modules[alias_name] = sys.modules[module_name]
 
-    # デッキのロード
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    # Set PTCG_PROJECT_ROOT to the repository root
     os.environ["PTCG_PROJECT_ROOT"] = project_root
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
-
-    deck_path = os.path.join(project_root, "sample_submission", "deck.csv")
-    if not os.path.exists(deck_path):
-        print(f"Error: deck.csv not found at {deck_path}")
-        sys.exit(1)
-
-    with open(deck_path) as f:
-        deck = [int(line) for line in f.readlines() if line.strip()]
-
-    # Copy deck.csv temporarily to CWD to let unmodified agents load it successfully
-    temp_deck_path = os.path.join(os.getcwd(), "deck.csv")
-    temp_copied = False
-    if not os.path.exists(temp_deck_path):
-        import shutil
-
-        shutil.copy2(deck_path, temp_deck_path)
-        temp_copied = True
 
     try:
+        # エージェント関数のロード (ラッパー適用済み)
         try:
             agent_a = load_agent(args.agent_a)
             agent_b = load_agent(args.agent_b)
@@ -87,11 +69,19 @@ def main() -> None:
             print(f"Error loading agents: {e}")
             sys.exit(1)
 
-        print(f"Running match...")
+        # それぞれのデッキをロード
+        try:
+            deck_a = load_deck(os.path.dirname(args.agent_a))
+            deck_b = load_deck(os.path.dirname(args.agent_b))
+        except Exception as e:
+            print(f"Error loading decks: {e}")
+            sys.exit(1)
+
+        print("Running match...")
         print(f"Agent A: {args.agent_a}")
         print(f"Agent B: {args.agent_b}")
 
-        env = make("cabt", configuration={"decks": [deck, deck]}, debug=True)
+        env = make("cabt", configuration={"decks": [deck_a, deck_b]}, debug=True)
         env.run([agent_a, agent_b])
 
         # Output dir check
@@ -106,12 +96,9 @@ def main() -> None:
 
         print("Done. Please open the HTML file in a web browser to view the match.")
 
-    finally:
-        if temp_copied and os.path.exists(temp_deck_path):
-            try:
-                os.remove(temp_deck_path)
-            except Exception as e:
-                print(f"Warning: Failed to remove temporary deck.csv: {e}")
+    except Exception as e:
+        print(f"Error executing match visualization: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
