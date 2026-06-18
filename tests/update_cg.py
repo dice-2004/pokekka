@@ -129,4 +129,3 @@ def sync_cg_folders() -> None:
 
 if __name__ == "__main__":
     sync_cg_folders()
-

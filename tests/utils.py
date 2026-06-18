@@ -31,9 +31,11 @@ def _is_valid_agent_dir(path: str) -> bool:
 
     有効条件: 直下に ``main.py`` と ``deck.csv`` が存在すること。
     """
-    return os.path.isdir(path) and os.path.isfile(
-        os.path.join(path, "main.py")
-    ) and os.path.isfile(os.path.join(path, "deck.csv"))
+    return (
+        os.path.isdir(path)
+        and os.path.isfile(os.path.join(path, "main.py"))
+        and os.path.isfile(os.path.join(path, "deck.csv"))
+    )
 
 
 def _scan_agent_subfolders(

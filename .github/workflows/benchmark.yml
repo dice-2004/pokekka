@@ -144,19 +144,29 @@ jobs:
           cd ..
           
           if [ -n "$CHANGED_DRAFT" ]; then
-            # agents_draft/ に変更あり: PR版 agents_draft vs main版 latest_submission
+            # agents_draft/ に変更あり: PR版 agents_draft vs main版 latest_submission (または sample_submission)
             echo "Detected changed draft agent: $CHANGED_DRAFT"
             AGENT_A_PATH="pr_branch/${CHANGED_DRAFT}/main.py"
-            AGENT_B_PATH="main_branch/latest_submission/main.py"
             A_LABEL="${CHANGED_DRAFT}/main.py"
-            B_LABEL="Base（現在のmainブランチのlatest_submission）"
+            if [ -f "main_branch/latest_submission/main.py" ]; then
+              AGENT_B_PATH="main_branch/latest_submission/main.py"
+              B_LABEL="Base（現在のmainブランチのlatest_submission）"
+            else
+              AGENT_B_PATH="main_branch/sample_submission/main.py"
+              B_LABEL="Base（現在のmainブランチのsample_submission - フォールバック）"
+            fi
           elif [ -n "$CHANGED_LATEST" ]; then
-            # latest_submission/ のみ変更: PR版 latest_submission vs main版 latest_submission
+            # latest_submission/ のみ変更: PR版 latest_submission vs main版 latest_submission (または sample_submission)
             echo "Detected changes in latest_submission only"
             AGENT_A_PATH="pr_branch/latest_submission/main.py"
-            AGENT_B_PATH="main_branch/latest_submission/main.py"
             A_LABEL="latest_submission/main.py (PR)"
-            B_LABEL="Base（現在のmainブランチのlatest_submission）"
+            if [ -f "main_branch/latest_submission/main.py" ]; then
+              AGENT_B_PATH="main_branch/latest_submission/main.py"
+              B_LABEL="Base（現在のmainブランチのlatest_submission）"
+            else
+              AGENT_B_PATH="main_branch/sample_submission/main.py"
+              B_LABEL="Base（現在のmainブランチのsample_submission - フォールバック）"
+            fi
           else
             echo "No relevant agent changes detected, skipping benchmark."
             echo "### ⏭️ ベンチマークスキップ" > comment.md
