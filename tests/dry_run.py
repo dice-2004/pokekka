@@ -1,86 +1,107 @@
 """動作検証テスト (Dry Run)
 
 エージェントがシミュレータ環境で正常に1ゲーム完了できるかを検証するスクリプト。
-プロジェクトルートから `python tests/dry_run.py` で実行する。
+引数なしで実行された場合はリポジトリ内のすべてのエージェントを自動検出し、
+それぞれのフォルダ内の `deck.csv` とエージェントコードを用いて動作検証を順次行います。
 
-cg.game モジュールを直接使用してシミュレーションを実行する。
-kaggle-environments の cabt 環境はバージョン差異の影響を受ける可能性があるため、
-ローカルテストではコンペ提供の cg モジュールを直接利用する。
+使用例:
+    # すべてのエージェントを一括テスト
+    python tests/dry_run.py
+    
+    # 特定のエージェントを指定してテスト
+    python tests/dry_run.py --agent-dir agents/rules_baseline
 """
 
 import sys
 import os
+import argparse
+import traceback
 
-_SAMPLE_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "sample_submission")
-)
+# プロジェクトルートを sys.path に追加して utils をロード
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from tests.utils import discover_agents, load_agent, load_deck, temporary_sys_path
 
 
-def main() -> None:
-    # sample_submission/ を sys.path に追加
-    if _SAMPLE_DIR not in sys.path:
-        sys.path.insert(0, _SAMPLE_DIR)
-
-    # Set PTCG_PROJECT_ROOT for GameInitialize to locate CSVs
-    os.environ["PTCG_PROJECT_ROOT"] = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..")
-    )
+def run_dry_test(agent_name: str, agent_dir: str) -> bool:
+    """指定されたエージェントの動作検証（Dry Run）を行う。"""
+    print("\n" + "=" * 50)
+    print(f" Testing Agent: {agent_name}")
+    print(f" Path: {agent_dir}")
+    print("=" * 50)
 
     # デッキのロード
-    deck_path = os.path.join(_SAMPLE_DIR, "deck.csv")
-    if not os.path.exists(deck_path):
-        print(f"Error: deck.csv not found at {deck_path}")
-        sys.exit(1)
+    try:
+        deck = load_deck(agent_dir)
+        print(f"Deck loaded: {len(deck)} cards")
+    except Exception as e:
+        print(f"Error loading deck: {e}")
+        return False
 
-    with open(deck_path) as f:
-        deck = [int(line) for line in f.readlines() if line.strip()]
+    # Set PTCG_PROJECT_ROOT for GameInitialize to locate CSVs
+    os.environ["PTCG_PROJECT_ROOT"] = project_root
 
-    print(f"Deck loaded: {len(deck)} cards")
+    # エージェント関数のロード (ラッパー付き)
+    agent_main_py = os.path.join(agent_dir, "main.py")
+    try:
+        agent_fn = load_agent(agent_main_py)
+    except Exception as e:
+        print(f"Error loading agent code: {e}")
+        traceback.print_exc()
+        return False
 
-    # deck.csv の読み取り・インポート前に CWD を退避し、対戦終了時に確実に復元する
+    # エージェントのディレクトリ内の cg モジュールをインポートしてテストを行う
     original_cwd = os.getcwd()
-    os.chdir(_SAMPLE_DIR)
+    os.chdir(agent_dir)
 
     try:
-        from main import agent
-        from cg.game import battle_start, battle_select, battle_finish
-        from cg.api import to_observation_class
+        # sys.path にエージェントフォルダを追加して、そのフォルダ内の cg をロードする
+        with temporary_sys_path([agent_dir]):
+            from cg.game import battle_start, battle_select, battle_finish
+            from cg.api import to_observation_class
 
-        # cg.game で直接対戦を開始
-        print("Starting battle...")
-        obs_dict, start_data = battle_start(deck, deck)
-        if obs_dict is None:
-            print(
-                f"Battle start failed. "
-                f"errorPlayer={start_data.errorPlayer}, "
-                f"errorType={start_data.errorType}"
-            )
-            sys.exit(1)
+            print("Starting battle simulation...")
+            obs_dict, start_data = battle_start(deck, deck)
+            if obs_dict is None:
+                print(
+                    f"Battle start failed. "
+                    f"errorPlayer={start_data.errorPlayer}, "
+                    f"errorType={start_data.errorType}"
+                )
+                return False
 
-        print("Battle started successfully.")
+            print("Battle started successfully. Stepping...")
 
-        step = 0
-        max_steps = 5000  # 無限ループ防止
+            step = 0
+            max_steps = 5000  # 無限ループ防止
 
-        while step < max_steps:
-            obs = to_observation_class(obs_dict)
+            while step < max_steps:
+                obs = to_observation_class(obs_dict)
 
-            # 試合終了判定
-            if obs.current is not None and obs.current.result != -1:
-                print(f"Game ended at step {step}. Result: {obs.current.result}")
-                break
+                # 試合終了判定
+                if obs.current is not None and obs.current.result != -1:
+                    print(
+                        f"Game ended at step {step}. Result: {obs.current.result}"
+                    )
+                    break
 
-            # エージェントに選択させる
-            action = agent(obs_dict)
-            obs_dict = battle_select(action)
-            step += 1
-        else:
-            print(f"Warning: Reached max_steps ({max_steps}) without game ending.")
-            sys.exit(1)
+                # エージェントに選択させる
+                action = agent_fn(obs_dict)
+                obs_dict = battle_select(action)
+                step += 1
+            else:
+                print(
+                    f"Warning: Reached max_steps ({max_steps}) without game ending."
+                )
+                return False
+
     except Exception as e:
         current_step = locals().get("step", 0)
         print(f"Error at step {current_step}: {e}")
-        sys.exit(1)
+        traceback.print_exc()
+        return False
     finally:
         try:
             from cg.game import battle_finish
@@ -90,7 +111,53 @@ def main() -> None:
             pass
         os.chdir(original_cwd)
 
-    print(f"Dry run completed successfully. ({step} steps)")
+    print(f"Dry run completed successfully for {agent_name}. ({step} steps)")
+    return True
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Dry run Pokémon TCG agents.")
+    parser.add_argument(
+        "--agent-dir",
+        help="Path to specific agent directory (e.g. agents/rules_baseline)",
+    )
+    args = parser.parse_args()
+
+    if args.agent_dir:
+        # 特定エージェントの検証
+        agent_dir = os.path.abspath(args.agent_dir)
+        if not os.path.exists(agent_dir) or not os.path.isdir(agent_dir):
+            print(f"Error: Directory not found: {agent_dir}")
+            sys.exit(1)
+        agent_name = os.path.basename(agent_dir.rstrip("/"))
+        success = run_dry_test(agent_name, agent_dir)
+        sys.exit(0 if success else 1)
+    else:
+        # すべてのエージェントを自動検出して一括検証
+        agents = discover_agents(project_root)
+        if not agents:
+            print("No active agents found in agents/ or sample_submission/.")
+            sys.exit(1)
+
+        print(f"Discovered {len(agents)} agents to test: {list(agents.keys())}")
+        failed_agents = []
+
+        for name, path in agents.items():
+            success = run_dry_test(name, path)
+            if not success:
+                failed_agents.append(name)
+
+        print("\n" + "=" * 50)
+        print(" Dry Run Summary")
+        print("=" * 50)
+        print(f"Total Tested: {len(agents)}")
+        print(f"Passed:       {len(agents) - len(failed_agents)}")
+        print(f"Failed:       {len(failed_agents)}")
+        if failed_agents:
+            print(f"Failed list:  {failed_agents}")
+        print("=" * 50)
+
+        sys.exit(1 if failed_agents else 0)
 
 
 if __name__ == "__main__":

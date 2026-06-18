@@ -20,6 +20,7 @@
   - `docs/` 内の仕様書ファイルにおける `dry_run.py` の仕様記述および Devcontainer のスニペットを、現在の実ファイルの内容に揃えて修正。
   - `.agents/AGENTS.md` の中の `file:///` 絶対パスをリポジトリ相対リンクへ修正。
   - `docs/project_specification.md` 内の絶対パス `/home/dice/...` を `<project_root>/` プレースホルダへ修正。
+  - `mypy` が依存ライブラリ（`cg/api.py`, `cg/utils.py` など）の内部的な型アノテーションの不備を検知して落ちる問題を解決するため、`ci.yml` の `mypy` 実行コマンドに `--follow-imports=silent` オプションを追加。
 
 ### 2. 修正されたファイルと修正内容
 | ファイル | 深刻度 | 修正内容 |
@@ -35,6 +36,7 @@
 | `docs/docker_env_specification.md` | 🟡 軽微 | Devcontainerのsettings/extensionsスニペットを実ファイルと整合。 |
 | `docs/cicd_specification.md` | 🟡 軽微 | `dry_run.py` の説明を cg.game を直接実行する記述に修正。 |
 | `tests/visualize_match.py` | 🟡 軽微 | 一時 `deck.csv` のコピー先を `os.getcwd()` に修正。 |
+| `.github/workflows/ci.yml` | 🟠 重大 | `mypy` の実行オプションに `--follow-imports=silent` を追加し、外部依存ライブラリの型エラー検知によるジョブ失敗を防止。 |
 
 ### 3. 検証結果
 - `python tests/dry_run.py` および `python tests/benchmark.py --agent-a sample_submission/main.py --agent-b sample_submission/main.py --matches 2` がローカルでエラーなく実行可能であることを確認。
@@ -110,6 +112,39 @@
 - `main.py` 復元後、`tests/benchmark.py` の 4マッチテストを実行。
 - エラーやクラッシュは 0 件で正常終了することを確認。
 - テスト終了後、一時コピーされた `deck.csv` がプロジェクトルートから正常に自動削除（クリーンアップ）されることを確認。
+
+---
+
+## [2026-06-18 16:35] チーム開発向けの複数エージェント並行開発・対戦検証環境の構築
+
+### 1. 作業概要
+- チームメンバーがそれぞれ独立したフォルダ（`agents/` 配下）で並行開発し、それらを `sample_submission` にコピーすることなく競合なくテスト・対戦させるための仕組みを構築。
+- 異なる `deck.csv` をコピーすることなくロードさせるため、実行時に対象エージェントのディレクトリに一時的に CWD を切り替える CWD & Path Wrapping 機構を導入。
+- 共通の `cg` パッケージが更新された際に一括同期する `update_cg.py` の追加。
+- 動作検証 (`dry_run.py`)、対戦ベンチマーク (`benchmark.py`)、および可視化 (`visualize_match.py`) の複数エージェント対応。
+- 総当たり戦（Round Robin）モード、ベースライン比較モードを新規実装。
+- CI/CD ワークフロー (`ci.yml`, `benchmark.yml`) および開発ガイドライン (`AGENTS.md`) を更新。
+- Dockerコンテナ（`ptcg-dev:latest`）をビルドし、コンテナ内での全テスト動作が正常（エラー 0 件）であることを実機検証。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `tests/utils.py` | 🟢 新規 | エージェント自動検出、CWDラッパー、エージェント・デッキのロード処理を共通化。 |
+| `tests/update_cg.py` | 🟢 新規 | 共通 `cg` フォルダを全エージェントフォルダに一斉同期・上書きコピーするスクリプト。 |
+| `tests/dry_run.py` | 🟠 重大 | 自動検出されたすべてのエージェントフォルダを一括または個別指定で動作テストできるように拡張。C++二重ロードによるクラッシュを防止。 |
+| `tests/benchmark.py` | 🟠 重大 | 個別対戦時にお互いの `deck.csv` を動的ロード。総当たり戦（Round Robin）およびベースライン比較対戦機能を追加。 |
+| `tests/visualize_match.py` | 🟠 重大 | `tests/utils.py` 経由のロードに統一し、複数エージェント間の対戦HTML可視化生成に対応。 |
+| `.github/workflows/ci.yml` | 🟠 重大 | 検査対象に `agents/` 配下を動的に追加。全エージェントの `dry_run.py` 一括実行を組み込み。 |
+| `.github/workflows/benchmark.yml` | 🟠 重大 | 手動実行時に総当たり戦やベースライン戦を選択・起動できるように inputs を拡張。 |
+| `docs/agent_management_specification.md` | 🟢 新規 | 複数エージェント開発環境および対戦検証の仕様書を新設。 |
+| `docs/review_report.md` | 🟡 軽微 | 第2回品質レビュー（C++ライブラリ二重ロード競合と対策など）を追記。 |
+| `.agents/AGENTS.md` | 🟡 軽微 | 複数エージェント構成、ラッパー、同期スクリプトの利用ガイドを追記。 |
+| `LOG.md` | 🟡 軽微 | 本日の作業内容と検証結果をログへ記録。 |
+
+### 3. 検証結果
+- Docker コンテナ内での一括 `dry_run.py`（2エージェント対象）が 0 件エラーで正常にパス。
+- `benchmark.py` を用いた個別対戦、総当たり戦、ベースライン対戦の各テスト対戦がエラーなく終了し、スコア表・順位表が正確に出力されることを確認。
+- `visualize_match.py` による対戦HTMLの生成に成功し、競合エラーが発生しないことを確認。
 
 ---
 
