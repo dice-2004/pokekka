@@ -316,7 +316,11 @@ def _play_score(
             field_counts[Staryu] >= 1
             and (
                 hand_counts[Mega_Starmie_ex] == 0
-                or hand_counts[Basic_Water_Energy] + hand_counts[Ignition_Energy] == 0
+                or (
+                    hand_counts[Basic_Water_Energy]
+                    + hand_counts[Ignition_Energy]
+                    == 0
+                )
             )
         ):
             score = 23000
@@ -504,11 +508,10 @@ def agent(obs_dict: dict) -> list[int]:
             if card is not None:
                 data = card_table[card.id]
                 if data.cardType == CardType.POKEMON:
-                    score = (
-                        25000 - field_counts[Staryu] * 1000
-                        if card.id == Staryu
-                        else -1
-                    )
+                    if card.id == Staryu:
+                        score = 25000 - field_counts[Staryu] * 1000
+                    else:
+                        score = -1
                 else:
                     score = _play_score(
                         card,
