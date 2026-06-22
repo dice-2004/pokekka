@@ -15,7 +15,7 @@
 | `agents_draft/fuckStar/main.py` | メガスターミー ex デッキ向けのメインロジックへ全面更新。 |
 
 ### 3. 検証結果
-- これから `dry_run` でローカル検証を実施予定。
+- `python3 tests/dry_run.py --agent-dir agents_draft/fuckStar` を実行し、34 ステップで対戦完了することを確認。
 
 ## [2026-06-19 00:44] PR動作検証エラーの解消と AGENTS.md ガイドラインの最適化
 

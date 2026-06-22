@@ -19,8 +19,9 @@ from cg.api import (
 """
 Mega Starmie ex Deck
 This deck prioritizes establishing Mega Starmie ex and attacking with Jetting Blow.
-If Jetting Blow cannot take the knockout but Nebula Beam can do so with Ignition Energy,
-the agent prefers Nebula Beam. Otherwise it defaults to Jetting Blow.
+If Jetting Blow cannot take the knockout but Nebula Beam can do so with
+Ignition Energy, the agent prefers Nebula Beam. Otherwise it defaults to
+Jetting Blow.
 """
 
 
@@ -89,8 +90,13 @@ plan = BattlePlan()
 pre_turn = -1
 
 
-def get_card(obs: Observation, area: AreaType, index: int, player_index: int) -> Pokemon | Card | None:
-    """Helper function to safely extract a Card or Pokemon object from specific zones."""
+def get_card(
+    obs: Observation,
+    area: AreaType,
+    index: int,
+    player_index: int,
+) -> Pokemon | Card | None:
+    """Safely extract a Card or Pokemon object from a zone."""
     ps = obs.current.players[player_index]
     match area:
         case AreaType.DECK:
@@ -155,7 +161,13 @@ def _has_supporter_in_hand(hand_counts: dict[int, int]) -> bool:
     return any(hand_counts[card_id] > 0 for card_id in SUPPORTER_IDS)
 
 
-def _build_attack_plan(state, my_state, op_state, select, hand_counts: dict[int, int]) -> BattlePlan:
+def _build_attack_plan(
+    state,
+    my_state,
+    op_state,
+    select,
+    hand_counts: dict[int, int],
+) -> BattlePlan:
     current_plan = BattlePlan()
 
     active = my_state.active[0] if len(my_state.active) > 0 else None
@@ -180,7 +192,10 @@ def _build_attack_plan(state, my_state, op_state, select, hand_counts: dict[int,
         upper_can_ko = upper_damage >= opponent_active.hp
         lower_can_ko = lower_damage >= opponent_active.hp
 
-        if STARMIE_UPPER_ATTACK_ID in option_attack_ids and STARMIE_LOWER_ATTACK_ID in option_attack_ids:
+        if (
+            STARMIE_UPPER_ATTACK_ID in option_attack_ids
+            and STARMIE_LOWER_ATTACK_ID in option_attack_ids
+        ):
             if can_reach_lower and lower_can_ko and not upper_can_ko:
                 current_plan.preferred_attack_id = STARMIE_LOWER_ATTACK_ID
                 current_plan.use_lower_attack = True
@@ -192,7 +207,10 @@ def _build_attack_plan(state, my_state, op_state, select, hand_counts: dict[int,
         elif STARMIE_UPPER_ATTACK_ID in option_attack_ids:
             current_plan.preferred_attack_id = STARMIE_UPPER_ATTACK_ID
 
-        if current_plan.preferred_attack_id == STARMIE_LOWER_ATTACK_ID and not can_reach_lower:
+        if (
+            current_plan.preferred_attack_id == STARMIE_LOWER_ATTACK_ID
+            and not can_reach_lower
+        ):
             current_plan.preferred_attack_id = STARMIE_UPPER_ATTACK_ID
             current_plan.use_lower_attack = False
 
@@ -252,7 +270,16 @@ def _energy_attach_score(
     return score
 
 
-def _play_score(card: Card, state, my_state, field_counts, hand_counts, discard_counts, bench_room: bool, stadium_id: int) -> int:
+def _play_score(
+    card: Card,
+    state,
+    my_state,
+    field_counts,
+    hand_counts,
+    discard_counts,
+    bench_room: bool,
+    stadium_id: int,
+) -> int:
     score = 1000
 
     if card.id == Staryu:
@@ -262,7 +289,11 @@ def _play_score(card: Card, state, my_state, field_counts, hand_counts, discard_
         if not bench_room:
             score = -1
     elif card.id == Mega_Signal:
-        if field_counts[Staryu] >= 1 and field_counts[Mega_Starmie_ex] == 0 and hand_counts[Mega_Starmie_ex] == 0:
+        if (
+            field_counts[Staryu] >= 1
+            and field_counts[Mega_Starmie_ex] == 0
+            and hand_counts[Mega_Starmie_ex] == 0
+        ):
             score = 22000
         else:
             score = 1000
@@ -281,7 +312,13 @@ def _play_score(card: Card, state, my_state, field_counts, hand_counts, discard_
         else:
             score = -1
     elif card.id == Hilda:
-        if field_counts[Staryu] >= 1 and (hand_counts[Mega_Starmie_ex] == 0 or hand_counts[Basic_Water_Energy] + hand_counts[Ignition_Energy] == 0):
+        if (
+            field_counts[Staryu] >= 1
+            and (
+                hand_counts[Mega_Starmie_ex] == 0
+                or hand_counts[Basic_Water_Energy] + hand_counts[Ignition_Energy] == 0
+            )
+        ):
             score = 23000
         else:
             score = 6000
@@ -298,7 +335,11 @@ def _play_score(card: Card, state, my_state, field_counts, hand_counts, discard_
     elif card.id == Pokegear_3_0:
         score = 12000 if not _has_supporter_in_hand(hand_counts) else 3500
     elif card.id == Night_Stretcher:
-        if discard_counts[Staryu] > 0 or discard_counts[Basic_Water_Energy] > 0 or discard_counts[Mega_Starmie_ex] > 0:
+        if (
+            discard_counts[Staryu] > 0
+            or discard_counts[Basic_Water_Energy] > 0
+            or discard_counts[Mega_Starmie_ex] > 0
+        ):
             score = 14000
         else:
             score = 4000
@@ -308,13 +349,21 @@ def _play_score(card: Card, state, my_state, field_counts, hand_counts, discard_
         score = 4000
     elif card.id == Scoop_Up_Cyclone:
         active = my_state.active[0] if len(my_state.active) > 0 else None
-        if active is not None and active.id == Mega_Starmie_ex and active.hp < active.maxHp:
+        if (
+            active is not None
+            and active.id == Mega_Starmie_ex
+            and active.hp < active.maxHp
+        ):
             score = 16000
         else:
             score = 2000
     elif card.id == Wallys_Compassion:
         active = my_state.active[0] if len(my_state.active) > 0 else None
-        if active is not None and active.id == Mega_Starmie_ex and active.hp < active.maxHp:
+        if (
+            active is not None
+            and active.id == Mega_Starmie_ex
+            and active.hp < active.maxHp
+        ):
             score = 13000
         else:
             score = 3000
@@ -390,9 +439,15 @@ def agent(obs_dict: dict) -> list[int]:
                         score += 1200 + energy_count * 50
                     elif card.id == Staryu:
                         score += 700 + energy_count * 20
-                elif context in {SelectContext.SETUP_ACTIVE_POKEMON, SelectContext.TO_FIELD}:
+                elif context in {
+                    SelectContext.SETUP_ACTIVE_POKEMON,
+                    SelectContext.TO_FIELD,
+                }:
                     score = 5000 if card.id == Staryu else 100
-                elif context in {SelectContext.SETUP_BENCH_POKEMON, SelectContext.TO_BENCH}:
+                elif context in {
+                    SelectContext.SETUP_BENCH_POKEMON,
+                    SelectContext.TO_BENCH,
+                }:
                     if card.id == Staryu:
                         score = 6000 if bench_room else -1
                     elif card.id == Mega_Starmie_ex:
@@ -449,18 +504,46 @@ def agent(obs_dict: dict) -> list[int]:
             if card is not None:
                 data = card_table[card.id]
                 if data.cardType == CardType.POKEMON:
-                    score = 25000 - field_counts[Staryu] * 1000 if card.id == Staryu else -1
+                    score = (
+                        25000 - field_counts[Staryu] * 1000
+                        if card.id == Staryu
+                        else -1
+                    )
                 else:
-                    score = _play_score(card, state, my_state, field_counts, hand_counts, discard_counts, bench_room, stadium_id)
+                    score = _play_score(
+                        card,
+                        state,
+                        my_state,
+                        field_counts,
+                        hand_counts,
+                        discard_counts,
+                        bench_room,
+                        stadium_id,
+                    )
 
         elif option.type == OptionType.ATTACH:
             card = get_card(obs, AreaType.HAND, option.index, my_index)
             pokemon = get_card(obs, option.inPlayArea, option.inPlayIndex, my_index)
             if card is not None and isinstance(pokemon, Pokemon):
-                score = _energy_attach_score(pokemon, card, option.inPlayArea == AreaType.ACTIVE, state, hand_counts)
-                if card.id == Ignition_Energy and pokemon.id == Mega_Starmie_ex and len(pokemon.energies) == 2 and plan.use_lower_attack:
+                score = _energy_attach_score(
+                    pokemon,
+                    card,
+                    option.inPlayArea == AreaType.ACTIVE,
+                    state,
+                    hand_counts,
+                )
+                if (
+                    card.id == Ignition_Energy
+                    and pokemon.id == Mega_Starmie_ex
+                    and len(pokemon.energies) == 2
+                    and plan.use_lower_attack
+                ):
                     score += 2000
-                if card.id == Basic_Water_Energy and pokemon.id == Mega_Starmie_ex and len(pokemon.energies) < 2:
+                if (
+                    card.id == Basic_Water_Energy
+                    and pokemon.id == Mega_Starmie_ex
+                    and len(pokemon.energies) < 2
+                ):
                     score += 500
                 if card.id == Basic_Water_Energy and pokemon.id == Staryu:
                     score += 200
@@ -491,8 +574,14 @@ def agent(obs_dict: dict) -> list[int]:
             opponent_active = op_state.active[0] if len(op_state.active) > 0 else None
             if active is not None and opponent_active is not None:
                 if active.id == Mega_Starmie_ex:
-                    upper_damage = _effective_damage(STARMIE_UPPER_ATTACK_ID, opponent_active)
-                    lower_damage = _effective_damage(STARMIE_LOWER_ATTACK_ID, opponent_active)
+                    upper_damage = _effective_damage(
+                        STARMIE_UPPER_ATTACK_ID,
+                        opponent_active,
+                    )
+                    lower_damage = _effective_damage(
+                        STARMIE_LOWER_ATTACK_ID,
+                        opponent_active,
+                    )
                     upper_can_ko = upper_damage >= opponent_active.hp
                     lower_can_ko = lower_damage >= opponent_active.hp
 
@@ -520,5 +609,12 @@ def agent(obs_dict: dict) -> list[int]:
 
         scores.append(score)
 
-    desc_indices = [index for index, _ in sorted(enumerate(scores), key=lambda item: item[1], reverse=True)]
+    desc_indices = [
+        index
+        for index, _ in sorted(
+            enumerate(scores),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+    ]
     return desc_indices[: select.maxCount]
