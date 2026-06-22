@@ -2,6 +2,14 @@
 
 本ファイルは、プロジェクト開発における変更履歴、実装意図、検証結果を記録するログファイルです。
 
+## [2026-06-22 00:10] Black 再整形エラーの解消
+
+### 1. 作業概要
+- `latest_submission/main.py` と `agents/StarEx/main.py` に残っていた `[: select.maxCount]` の空白を修正し、Black の再整形対象を解消。
+
+### 2. 検証結果
+- `python3 tests/dry_run.py --agent-dir latest_submission` を実行し、71 ステップで対戦完了することを確認。
+
 ## [2026-06-22 00:00] メガスターミー ex デッキの main.py 実装
 
 ### 1. 作業概要
