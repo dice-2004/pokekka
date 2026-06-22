@@ -2,6 +2,21 @@
 
 本ファイルは、プロジェクト開発における変更履歴、実装意図、検証結果を記録するログファイルです。
 
+## [2026-06-22 00:00] メガスターミー ex デッキの main.py 実装
+
+### 1. 作業概要
+- `agents_draft/fuckStar/main.py` をメガスターミー ex 軸のヒューリスティックへ差し替え。
+- `Staryu`, `Mega Starmie ex`, `Ignition Energy`, `Mega Signal`, `Hilda`, `Salvatore`, `Lillie's Determination` を中心に展開優先へ再設計。
+- 攻撃は基本的に `Jetting Blow` を優先し、`Nebula Beam` は「上技で倒せないが下技で一撃」「かつ Ignition Energy で到達可能」な場合のみ選ぶように分岐を追加。
+
+### 2. 変更・追加されたファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `agents_draft/fuckStar/main.py` | メガスターミー ex デッキ向けのメインロジックへ全面更新。 |
+
+### 3. 検証結果
+- これから `dry_run` でローカル検証を実施予定。
+
 ## [2026-06-19 00:44] PR動作検証エラーの解消と AGENTS.md ガイドラインの最適化
 
 ### 1. 作業概要
