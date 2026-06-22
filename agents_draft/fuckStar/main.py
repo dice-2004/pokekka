@@ -617,4 +617,4 @@ def agent(obs_dict: dict) -> list[int]:
             reverse=True,
         )
     ]
-    return desc_indices[: select.maxCount]
+    return desc_indices[:select.maxCount]
