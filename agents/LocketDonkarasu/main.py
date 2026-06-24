@@ -41,11 +41,11 @@ card_table = {c.cardId: c for c in all_card}
 # Decklist
 Team_Rocket_s_Murkrow = 463  # ×4
 Team_Rocket_s_Honchkrow = 891  # ×3
-Team_Rocket_s_Porygon = 473  # ×3
-Team_Rocket_s_Porygon2 = 474  # ×1
+Team_Rocket_s_Porygon = 473  # ×2
+Team_Rocket_s_Porygon2 = 474  # ×2
 Team_Rocket_s_Porygon_Z = 475  # ×1
-Team_Rocket_s_Mimikyu = 434  # ×1
 Team_Rocket_s_Articuno = 414  # ×1
+Roto_Stick = 1077  # ×2
 Air_Balloon = 1174  # ×1
 Brave_Bangle = 1175  # ×1
 Miracle_Headset = 1109  # ×1
