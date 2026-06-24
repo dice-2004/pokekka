@@ -206,23 +206,24 @@ def supporter_score(card_id: int, my_state, op_state, field_counts, remaining_co
 
     if card_id == Crispin:
         if remaining_counts[Basic_Fire_Energy] > 0 and remaining_counts[Basic_Psychic_Energy] > 0:
-            return 26000 if not main_ready else 18000
-        return 8000
+            return 30000 if not main_ready else 20000
+        return 12000
     if card_id == Lillie_Determination:
-        return 24000 if len(my_state.hand) <= 4 else 14000
+        return 28000 if len(my_state.hand) <= 4 else 16000
     if card_id == Boss_Orders:
-        return 18000 if op_prizes_left <= 2 else 11000
+        return 22000 if op_prizes_left <= 2 else 14000
     if card_id == Rosas_Encouragement:
-        return 16000 if len(my_state.prize) > len(op_state.prize) else 1500
+        return 20000 if len(my_state.prize) > len(op_state.prize) else 5000
     if card_id == Lucian:
-        return 7000 if len(my_state.hand) <= 3 else 1000
+        return 12000 if len(my_state.hand) <= 3 else 4000
     if card_id == Jamming_Tower:
-        return 6000
+        return 7000
     if card_id == Team_Rocket_Watchtower:
-        return 5000
+        return 6000
     if card_id == Unfair_Stamp:
-        return 22000 if op_prizes_left <= 4 else 10000
-    return -1
+        return 26000 if op_prizes_left <= 4 else 14000
+    # Default: prefer playing supporters rather than discarding them
+    return 20000
 
 
 def hand_score(card_id: int, my_state, op_state, field_counts, hand_counts, discard_counts, remaining_counts) -> int:
@@ -234,12 +235,12 @@ def hand_score(card_id: int, my_state, op_state, field_counts, hand_counts, disc
         return 38000 if field_counts[Dreepy] >= 1 else 12000
     if card_id == Dragapult_ex:
         if field_counts[Dragapult_ex] >= 2:
-            return 3000
+            return 1000
         if field_counts[Dreepy] >= 1 and hand_counts[Rare_Candy] >= 1:
-            return 65000
+            return 55000
         if field_counts[Drakloak] >= 1:
-            return 52000
-        return 28000
+            return 42000
+        return 18000
     if card_id == Duskull:
         return 50000 if field_counts[Duskull] == 0 else 22000
     if card_id == Dusclops:
@@ -282,8 +283,8 @@ def hand_score(card_id: int, my_state, op_state, field_counts, hand_counts, disc
         if field_counts[Dragapult_ex] >= 1 and op_prizes_left <= 2:
             return -1
         if field_counts[Dragapult_ex] >= 1 or field_counts[Dusknoir] >= 1:
-            return 20000
-        return 10000
+            return 12000
+        return 6000
     return 2000
 
 
