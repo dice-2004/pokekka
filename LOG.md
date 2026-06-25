@@ -9,6 +9,52 @@
 - 静的解析チェックをパスするため、Black による自動フォーマット (`scripts/lint.sh --inside --fix`) を実行し、`latest_submission/main.py`、`agents/DragonBomb/main.py`、`agents_draft/StarEx/main.py` の 3 ファイルを整形。
 - Mypy による型チェックで発生していた、`defaultdict(int)` に対する型注釈不足エラー (`Need type annotation for "field_counts"` 等) を解決するため、上記 3 ファイルの該当箇所に明示的な型注釈 (`defaultdict[int, int]`) を追加。
 
+## [2026-06-25 17:35] ダッシュボードHTMLにおける全体（観戦者）視点ボタンの削除
+
+### 1. 作業概要
+- ユーザーのフィードバックに基づき、不要となった「全体（観戦者）視点」ボタンをダッシュボードHTMLから削除。
+- `P0 視点` および `P1 視点` の2つのボタンのみの構成に変更。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `tests/visualize_match.py` | 🟡 軽微 | ダッシュボードHTMLのテンプレート内から「全体（観戦者）視点」ボタン（`playerIndex = 2`）を削除。 |
+
+### 3. 検証結果
+- `bash scripts/lint.sh --fix` により、静的解析チェックに合格することを確認。
+- `bash scripts/visualize.sh latest_submission/main.py --matches 3 --no-lint` を実行し、P0視点、P1視点ボタンのみが正しく配置されたHTMLダッシュボードが生成されることを確認。
+
+---
+
+## [2026-06-25 17:10] ダッシュボードHTMLからのHEROZ社外部ビジュアライザ遷移のバグ修正と動作確認
+
+### 1. 作業概要
+- 複数対戦をダッシュボードHTMLに集約し、各対戦からHEROZ社の外部ビジュアライザ（`ptcgvis.heroz.jp`）へPOST遷移する際のエラーを修正。
+- `tests/visualize_match.py` における以下の不具合を修正：
+  1. `Struct` オブジェクト（`env.steps[0][0]`）に対して、動的に代入されたキー `"visualize"` へ属性アクセス（`.visualize`）した際に発生する `AttributeError` を、安全な辞書メソッド `get("visualize")` アクセスに変更することで解決。
+  2. `env.environment.info` の参照を、`kaggle-environments` の実際の `Environment` インスタンス仕様に合わせ、直接 `.info`（および `getattr(env, "info", {})`）を参照する形に修正。
+- Flake8の静的解析エラー（`W293` 空白行上の不要なスペース、`E501` 文字列の行が長すぎる警告）を、JSON文字列化の事前変数定義化およびHTML/CSSタグの適切な折り返しによって完全に解消。
+- 自動遷移機能（timer、セッションストレージ、`playNext`）は完全に排除された状態を維持。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `tests/visualize_match.py` | 🟡 軽微 | `Struct` および `Environment` に対する属性アクセスの不具合修正。Flake8 エラー（W293, E501）の解消。 |
+
+### 3. 検証結果
+- `bash scripts/lint.sh --fix` を実行し、`tests/visualize_match.py` に静的解析・型チェックのエラーが一切出ないこと（Green）を確認。
+- `bash scripts/visualize.sh latest_submission/main.py --matches 3 --no-lint` を実行し、3試合分の対戦シミュレーションがすべてエラーなく完走することを確認。
+- 生成された `scratch/visualizer.html` に、各試合に対応する `openHerozVisualizer` を介した `POST` 送信フォームおよび遷移ボタンが正しく出力されていることを確認。
+
+---
+
+## [2026-06-25 16:10] HEROZ社外部ビジュアライザ画面上での自動遷移機能の実現
+
+### 1. 作業概要
+- ユーザーが「Open Visualizer」ボタンを押した先の HEROZ 社外部ビジュアライザ画面（`ptcgvis.heroz.jp`）が自動で次の試合に切り替わるように設計を改善。
+- Same-Origin Policy の制約を回避するため、セッションストレージと同一ウィンドウ名ターゲット（`ptcg_visualizer_window`）へのフォームPOST送信を組み合わせる仕組みを JavaScript にて考案・実装。
+- 元の HTML 側で対戦のステップ数（`len(env.steps)`）から所要時間を動的に算出（例: `ステップ数 * 333ms + 5秒`）してタイマーを動作させ、バックグラウンドのタブが次の HTML へ遷移した際に、同じウィンドウ名に向けて自動で次の対戦フォームを送信するように構築。
+
 ### 2. 変更・追加されたファイル
 | ファイル | 深刻度 | 変更内容 |
 |---------|--------|---------|
@@ -17,11 +63,60 @@
 | `agents/DragonBomb/main.py` | 🟡 修正 | Black による自動整形、および `field_counts` / `hand_counts` / `discard_counts` に型注釈 `defaultdict[int, int]` を追加。 |
 | `agents_draft/StarEx/main.py` | 🟡 修正 | Black による自動整形、および `field_counts` / `hand_counts` / `discard_counts` に型注釈 `defaultdict[int, int]` を追加。 |
 
+| `tests/visualize_match.py` | 🟡 軽微 | `html_content` への `autoplay_script`（セッションストレージ、ウィンドウターゲット固定、および自動フォーム送信ロジック）の動的注入処理を実装。 |
+
+### 3. 検証結果
+- `bash scripts/visualize.sh latest_submission/main.py --matches 3 --no-lint` を実行。
+- `visualizer.html` にステップ数（`37` ステップ）に応じたタイマーおよび `visualizer_2.html` への遷移、さらに同じウィンドウ名 `ptcg_visualizer_window` に向けたフォームの自動送信スクリプトが正しく埋め込まれていることを確認。
+
+---
+
+## [2026-06-25 15:58] 可視化対戦のファイル名設計見直しと自動遷移のユーザー体験向上
+
+### 1. 作業概要
+- 複数対戦の可視化において、1試合目の出力ファイル名を連番にせず指定された `output_path`（例: `visualizer.html`）そのものとするように変更。
+- これにより、ユーザーが普段開く「わかりやすいメインページ」からそのまま1試合目が開始され、再生終了後に自動的に連番ファイル（`visualizer_2.html`）へ遷移する設計となり、ユーザー体験を向上。
+- トラブルシューティングドキュメント（`docs/troubleshooting.md`）を新規作成し、文字化け現象の原因と解決策を記載。
+- `AGENT.md` にトラブルシューティング確認ルール、変更禁止ディレクトリ（`sample_submission/`, `latest_submission/`, `agents/`, `sample_deck/`, `scratch/`, `scripts/`, `.agents/`）および公式配布 `cg/` の極力変更禁止ルールを追記。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `tests/visualize_match.py` | 🟡 軽微 | 1試合目を連番なし（指定出力名）にし、2試合目以降を連番とするように出力ファイル名決定ロジックを変更。 |
+| `docs/troubleshooting.md` | 🟢 新規 | 不正バイトによるエンコーディング誤判定と文字化け問題のトラブルシューティングを新規追加。 |
+| `.agents/AGENTS.md` | 🟡 軽微 | トラブルシューティングの遵守ルール、変更禁止ディレクトリの明記、公式 `cg` フォルダの原則変更禁止ルールの追記。 |
+
+### 3. 検証結果
+- `bash scripts/visualize.sh latest_submission/main.py --matches 3 --no-lint` を実行し、`visualizer.html`（1試合目、遷移先: `visualizer_2.html`）、`visualizer_2.html`（2試合目、遷移先: `visualizer_3.html`）、`visualizer_3.html`（3試合目、遷移なし）が正常に出力されることを確認。
+- `visualizer.html` 内の `playNext` に `window.location.href = "visualizer_2.html"` を含む自動遷移コードが正常に注入されていることを確認。
+
+---
+
+## [2026-06-25 15:35] 複数可視化対戦機能とHTML自動遷移機能の実装
+
+### 1. 作業概要
+- 可視化対戦において、デフォルトで10戦連続、またはオプション引数で指定された数だけ対戦を実行できるよう変更。
+- 各対戦は、C++ゲームエンジン `libcg.so` のメモリリークや状態競合を防止するため、`multiprocessing` の `spawn` コンテキストを使用してプロセス分離された子プロセス内でシミュレーションを実行するよう設計。
+- 複数対戦時、出力ファイル名に自動的に連番を付与し（例: `visualizer_1.html`）、前の試合の再生が終了した際に自動的に次の試合のHTMLへ遷移する JavaScript コードを生成されるHTML内に注入。
+- リンター（Black, Flake8, Mypy）のエラーを修正し、静的チェックがパスすることを確認。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `tests/visualize_match.py` | 🟡 軽微 | `--matches` オプションの追加。プロセス分離による複数対戦ループの実装。HTMLへの自動遷移用JavaScript注入ロジックの追加。 |
+
+### 3. 検証結果
+- `bash scripts/visualize.sh latest_submission/main.py --matches 2 --no-lint` の実行により、2試合分の対戦（`visualizer_1.html`, `visualizer_2.html`）が別々のプロセスでシミュレートされて正常に出力されることを確認。
+- 出力された `visualizer_1.html` 内の `playNext` に `window.location.href = "visualizer_2.html"` を含む自動遷移コードが正常に注入されていることを確認。
+- `tests/visualize_match.py` のリンターおよび型チェックがすべて正常（Green）であることを確認。
+
+---
 
 ## [2026-06-25 10:32] AI開発行動ルールの改訂およびDockerコマンドスクリプト化、SSH Agent設定の導入
 
 ### 1. 作業概要
 - 開発行動指針(`.agents/AGENTS.md`)の追加・改訂。開発環境の選択、コード変更時の日本語による合意フロー、ドキュメント読み込み優�- 各種スクリプト（`dry_run.sh`, `benchmark.sh`, `visualize.sh`）のエージェント指定方法について、ユーザーが任意のディレクトリ形式（例: `agents/my_agent`、`agents_draft/my_agent`、`latest_submission`）やファイル指定で入力した場合でも、スクリプト側で自動的にパスを補完・解決する機能を追加。
+- 開発行動指針(`.agents/AGENTS.md`)の追加・改訂。開発環境の選択、コード変更時の日本語による合意フロー、ドキュメント読み込み優先度の定義。および、各種スクリプト（`dry_run.sh`, `benchmark.sh`, `visualize.sh`）のエージェント指定方法について、ユーザーが任意のディレクトリ形式（例: `agents/my_agent`, `agents_draft/my_agent`, `latest_submission`）やファイル指定で入力した場合でも、スクリプト側で自動的にパスを補完・解決する機能を追加。
 - `devcontainer.json` を変更し、コンテナ内 `PATH` に `/workspaces/pole/scripts` を自動登録。コンテナ内での `bash` や `scripts/` 指定を不要にし、直接実行（例: `dry_run.sh`）を可能に。
 - `benchmark.sh` と `visualize.sh` に位置引数による2つのエージェント設定ロジックを導入。1つ指定なら agent-a（相手はデフォルト）、2つ指定なら1つ目が agent-a、2つ目が agent-b に自動マッピングされるように変更（ホストからのDocker経由でも同様に機能）。
 - コンテナ内からのSSH Agent Forwarding問題を解決するため、Dockerfileへの`openssh-client`の追加、およびホスト側のSSHエージェント設定手順 of ドキュメント化を実施。
@@ -35,6 +130,7 @@
 | `scripts/benchmark.sh` | 🟢 新規 | 実行前に自動でリンターを走らせる、対戦評価（Benchmark）用スクリプト。簡易名・多様なエージェント指定（パス補完）、位置引数による2つのエージェント指定（オプション不要化）およびデフォルト値内包に対応。 |
 | `scripts/visualize.sh` | 🟢 新規 | 指定エージェント間の対戦を簡易的にGUI（HTML）可視化出力するスクリプト。簡易名・多様なエージェント指定（パス補完）、位置引数による2つのエージェント指定（オプション不要化）およびデフォルト値内包に対応。 |
 | `.devcontainer/devcontainer.json` | 🟡 軽微 | `containerEnv` に `/workspaces/pole/scripts` の `PATH` 追加設定を追記。 |��スクリプト側で自動的にパスを補完・解決する機能を追加。
+| `.devcontainer/devcontainer.json` | 🟡 軽微 | `containerEnv` に `/workspaces/pole/scripts` の `PATH` 追加設定を追記。 |スクリプト側で自動的にパスを補完・解決する機能を追加。
 - コンテナ内からのSSH Agent Forwarding問題を解決するため、Dockerfileへの`openssh-client`の追加、およびホスト側のSSHエージェント設定手順 of ドキュメント化を実施。
 
 ### 2. 変更・追加されたファイル
