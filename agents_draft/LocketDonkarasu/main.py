@@ -2,7 +2,7 @@ import os
 import sys
 from collections import defaultdict
 
-from cg.api import (
+from agents_draft.LocketDonkarasu.cg.api import (
     AreaType,
     CardType,
     Log,

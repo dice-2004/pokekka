@@ -6,7 +6,7 @@ LocketDonkarasuのデッキに含まれるすべてのカード詳細情報を�
 """
 
 import sys
-from agents.LocketDonkarasu.cg import api
+from agents_draft.LocketDonkarasu.cg import api
 
 # デッキリスト (Locket Donkarasu from main.py)
 DECK_CARDS = {

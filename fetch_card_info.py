@@ -7,7 +7,7 @@ LocketDonkarasu (またはその他のエージェント)のデッキに含ま�
 """
 
 import sys
-from agents.LocketDonkarasu.cg import api
+from agents_draft.LocketDonkarasu.cg import api
 
 
 def find_card(all_cards, card_id):
