@@ -64,7 +64,7 @@
 4. **共通シミュレータ API (`cg` モジュール) の同期**:
    - 共通の `sample_submission/cg/` 内のモジュールが更新された場合は、以下を実行して開発中エージェントの `cg` ディレクトリを同期します。
      ```bash
-     bash scripts/update_cg.sh
+     update_cg.sh
      ```
 5. **ローカルでの動作検証とベンチマーク**:
    - ドライランによるエラーチェックや、`latest_submission` との対戦ベンチマークを実施して性能を測定します（※詳細は「[実行・テスト・検証マニュアル](testing_and_execution.md)」を参照）。

@@ -5,10 +5,20 @@
 ## [2026-06-25 10:32] AI開発行動ルールの改訂およびDockerコマンドスクリプト化、SSH Agent設定の導入
 
 ### 1. 作業概要
-- 開発行動指針(`.agents/AGENTS.md`)の追加・改訂。開発環境の選択、コード変更時の日本語による合意フロー、ドキュメント読み込み優先度（README -> docs -> LOG）、Git操作の制限、およびPR時リンターの考慮などのルールを追加。
-- 面倒なDockerコマンドを簡易実行するためのスクリプト群（`scripts/`配下）の新規作成。環境自動判定、PR同等リンターの自動連携、よく使う引数のデフォルト内包に対応。
-- `scripts/lint.sh` 内でコンテナ内の絶対パス `/workspace` をハードコードしていた問題を、Dev Container 内の作業ディレクトリである `/workspaces/pole` に対処するため相対パス指定へ修正。
-- 各種スクリプト（`dry_run.sh`, `benchmark.sh`, `visualize.sh`）のエージェント指定方法について、ユーザーが任意のディレクトリ形式（例: `agents/my_agent`、`agents_draft/my_agent`、`latest_submission`）やファイル指定で入力した場合でも、スクリプト側で自動的にパスを補完・解決する機能を追加。
+- 開発行動指針(`.agents/AGENTS.md`)の追加・改訂。開発環境の選択、コード変更時の日本語による合意フロー、ドキュメント読み込み優�- 各種スクリプト（`dry_run.sh`, `benchmark.sh`, `visualize.sh`）のエージェント指定方法について、ユーザーが任意のディレクトリ形式（例: `agents/my_agent`、`agents_draft/my_agent`、`latest_submission`）やファイル指定で入力した場合でも、スクリプト側で自動的にパスを補完・解決する機能を追加。
+- `devcontainer.json` を変更し、コンテナ内 `PATH` に `/workspaces/pole/scripts` を自動登録。コンテナ内での `bash` や `scripts/` 指定を不要にし、直接実行（例: `dry_run.sh`）を可能に。
+- `benchmark.sh` と `visualize.sh` に位置引数による2つのエージェント設定ロジックを導入。1つ指定なら agent-a（相手はデフォルト）、2つ指定なら1つ目が agent-a、2つ目が agent-b に自動マッピングされるように変更（ホストからのDocker経由でも同様に機能）。
+- コンテナ内からのSSH Agent Forwarding問題を解決するため、Dockerfileへの`openssh-client`の追加、およびホスト側のSSHエージェント設定手順 of ドキュメント化を実施。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| `scripts/run_in_env.sh` | 🟢 新規 | ホストとコンテナ環境を自動検知してコマンドを中継する実行ヘルパー。 |
+| `scripts/lint.sh` | 🟢 新規 | CIと同等のBlack, Flake8, Mypyによるローカル静的チェックおよび自動フォーマットを行うスクリプト。（コンテナ内絶対パス指定を廃止し相対パスに修正） |
+| `scripts/dry_run.sh` | 🟢 新規 | 実行前に自動でリンターを走らせる、動作検証（Dry Run）用スクリプト。簡易名・多様なエージェント指定（パス補完）に対応。 |
+| `scripts/benchmark.sh` | 🟢 新規 | 実行前に自動でリンターを走らせる、対戦評価（Benchmark）用スクリプト。簡易名・多様なエージェント指定（パス補完）、位置引数による2つのエージェント指定（オプション不要化）およびデフォルト値内包に対応。 |
+| `scripts/visualize.sh` | 🟢 新規 | 指定エージェント間の対戦を簡易的にGUI（HTML）可視化出力するスクリプト。簡易名・多様なエージェント指定（パス補完）、位置引数による2つのエージェント指定（オプション不要化）およびデフォルト値内包に対応。 |
+| `.devcontainer/devcontainer.json` | 🟡 軽微 | `containerEnv` に `/workspaces/pole/scripts` の `PATH` 追加設定を追記。 |��スクリプト側で自動的にパスを補完・解決する機能を追加。
 - コンテナ内からのSSH Agent Forwarding問題を解決するため、Dockerfileへの`openssh-client`の追加、およびホスト側のSSHエージェント設定手順 of ドキュメント化を実施。
 
 ### 2. 変更・追加されたファイル

@@ -1,42 +1,89 @@
 #!/bin/bash
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-AGENT_ARG=""
+NO_LINT=false
+POSITIONAL_ARGS=()
 EXTRA_ARGS=()
 
-for arg in "$@"; do
-  if [[ "$arg" == --* ]]; then
+# ループカウンタによるパース
+args=("$@")
+i=0
+while [ $i -lt ${#args[@]} ]; do
+  arg="${args[$i]}"
+  if [ "$arg" = "--no-lint" ]; then
+    NO_LINT=true
+    i=$((i + 1))
+  elif [[ "$arg" == --* ]]; then
+    # オプション名を追加
     EXTRA_ARGS+=("$arg")
+    
+    # 次の引数が存在し、それがハイフンで始まらない場合は値とみなす
+    next_idx=$((i + 1))
+    if [ $next_idx -lt ${#args[@]} ]; then
+      next_arg="${args[$next_idx]}"
+      if [[ "$next_arg" != --* ]]; then
+        EXTRA_ARGS+=("$next_arg")
+        i=$((i + 2))
+      else
+        i=$((i + 1))
+      fi
+    else
+      i=$((i + 1))
+    fi
   else
-    AGENT_ARG="$arg"
+    POSITIONAL_ARGS+=("$arg")
+    i=$((i + 1))
   fi
 done
+
+# リンターの自動実行
+if [ "$NO_LINT" = false ]; then
+  echo "=== Running Linter before Visualization ==="
+  bash "$PROJECT_ROOT/scripts/lint.sh"
+  if [ $? -ne 0 ]; then
+    echo -e "\e[31m[Error] Linter failed. Please fix style/type issues before visualization, or run with --no-lint to bypass.\e[0m"
+    exit 1
+  fi
+fi
 
 # デフォルト設定
 AGENT_B="latest_submission/main.py"
 OUTPUT="scratch/visualizer.html"
 
-# パス解決
-FINAL_ARGS=()
-if [ -n "$AGENT_ARG" ]; then
-  # 1. main.py ファイルを直接指している場合
-  if [ -f "$PROJECT_ROOT/$AGENT_ARG" ]; then
-    RESOLVED_FILE="$AGENT_ARG"
-  # 2. ディレクトリを指しており、その配下に main.py が存在する場合
-  elif [ -f "$PROJECT_ROOT/$AGENT_ARG/main.py" ]; then
-    RESOLVED_FILE="$AGENT_ARG/main.py"
-  # 3. 単にフォルダ名のみが指定された場合 (例: my_agent)
+# エージェント解決関数
+resolve_agent_file() {
+  local input="$1"
+  local resolved=""
+  if [ -f "$PROJECT_ROOT/$input" ]; then
+    resolved="$input"
+  elif [ -f "$PROJECT_ROOT/$input/main.py" ]; then
+    resolved="$input/main.py"
   else
-    if [ -f "$PROJECT_ROOT/agents_draft/$AGENT_ARG/main.py" ]; then
-      RESOLVED_FILE="agents_draft/$AGENT_ARG/main.py"
-    elif [ -f "$PROJECT_ROOT/agents/$AGENT_ARG/main.py" ]; then
-      RESOLVED_FILE="agents/$AGENT_ARG/main.py"
+    if [ -f "$PROJECT_ROOT/agents_draft/$input/main.py" ]; then
+      resolved="agents_draft/$input/main.py"
+    elif [ -f "$PROJECT_ROOT/agents/$input/main.py" ]; then
+      resolved="agents/$input/main.py"
     else
-      RESOLVED_FILE="$AGENT_ARG"
+      resolved="$input"
     fi
   fi
-  
-  FINAL_ARGS+=("--agent-a" "$RESOLVED_FILE")
+  echo "$resolved"
+}
+
+FINAL_ARGS=()
+
+# 位置引数の数に応じた自動マッピング
+NUM_POSITIONAL=${#POSITIONAL_ARGS[@]}
+if [ $NUM_POSITIONAL -eq 1 ]; then
+  # 1つの場合は agent-a に割り当て
+  AGENT_A_RESOLVED=$(resolve_agent_file "${POSITIONAL_ARGS[0]}")
+  FINAL_ARGS+=("--agent-a" "$AGENT_A_RESOLVED")
+elif [ $NUM_POSITIONAL -ge 2 ]; then
+  # 2つの場合は 1つ目を agent-a、2つ目を agent-b に割り当て
+  AGENT_A_RESOLVED=$(resolve_agent_file "${POSITIONAL_ARGS[0]}")
+  AGENT_B_RESOLVED=$(resolve_agent_file "${POSITIONAL_ARGS[1]}")
+  FINAL_ARGS+=("--agent-a" "$AGENT_A_RESOLVED")
+  FINAL_ARGS+=("--agent-b" "$AGENT_B_RESOLVED")
 fi
 
 has_arg() {
@@ -48,7 +95,16 @@ has_arg() {
   return 1
 }
 
-if ! has_arg "--agent-b"; then
+has_final_arg() {
+  for a in "${FINAL_ARGS[@]}"; do
+    if [[ "$a" == "$1"* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+if ! has_final_arg "--agent-b" && ! has_arg "--agent-b"; then
   FINAL_ARGS+=("--agent-b" "$AGENT_B")
 fi
 if ! has_arg "--output"; then

@@ -23,4 +23,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pandas && \
     chmod -R a+w /usr/local/lib/python3.10/site-packages
 
+ENV PATH="/workspaces/pole/scripts:${PATH}"
+
 CMD ["bash"]
