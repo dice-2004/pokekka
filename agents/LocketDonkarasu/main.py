@@ -18,9 +18,9 @@ from cg.api import (
 )
 
 """
-Dragapult ex Deck
+Team Rocket's Honchkrow Deck
 Advanced Level
-This deck focuses on setting up multiple knockouts to take at least three Prize cards in a single turn with its Phantom Dive attack.
+This deck focuses on establishing Honchkrow early, discarding only the minimum Team Rocket supporters needed for Rocket Feathers, and shifting to Porygon2 / Porygon-Z as late-game damage.
 """
 
 # Load deck.csv in the dataset
@@ -62,28 +62,64 @@ Team_Rocket_s_Energy = 15  # ×4
 Ignition_Energy = 17  # ×4
 
 # Compatibility aliases for the existing agent logic.
-Dreepy = 463
-Drakloak = 891
-Dragapult_ex = 473
-Fezandipiti_ex = 474
-Latias_ex = 475
-Budew = 434
-Meowth_ex = 414
-Rare_Candy = 1174
-Unfair_Stamp = 1175
-Buddy_Buddy_Poffin = 1109
-Night_Stretcher = 1134
-Crushing_Hammer = 1097
-Ultra_Ball = 1152
-Poke_Pad = 1216
-Lucky_Helmet = 1217
-Boss_Orders = 1218
-Crispin = 1219
-Brock_Scouting = 1220
-Lillie_Determination = 1257
-Team_Rocket_Watchtower = 1257
-Basic_Fire_Energy = 15
-Basic_Psychic_Energy = 17
+# These names are retained so the rest of the file can be updated incrementally.
+Dreepy = Team_Rocket_s_Murkrow
+Drakloak = Team_Rocket_s_Honchkrow
+Dragapult_ex = Team_Rocket_s_Porygon
+Fezandipiti_ex = Team_Rocket_s_Porygon2
+Latias_ex = Team_Rocket_s_Porygon_Z
+Budew = Team_Rocket_s_Articuno
+Meowth_ex = Team_Rocket_s_Articuno
+Rare_Candy = Air_Balloon
+Unfair_Stamp = Brave_Bangle
+Buddy_Buddy_Poffin = Miracle_Headset
+Night_Stretcher = Team_Rocket_s_Transceiver
+Crushing_Hammer = Night_Stretcher
+Ultra_Ball = Poke_Pad
+Poke_Pad = Team_Rocket_s_Ariana
+Lucky_Helmet = Team_Rocket_s_Archer
+Boss_Orders = Team_Rocket_s_Giovanni
+Crispin = Team_Rocket_s_Petrel
+Brock_Scouting = Team_Rocket_s_Proton
+Lillie_Determination = Team_Rocket_s_Factory
+Team_Rocket_Watchtower = Team_Rocket_s_Factory
+Basic_Fire_Energy = Team_Rocket_s_Energy
+Basic_Psychic_Energy = Ignition_Energy
+
+Murkrow = Team_Rocket_s_Murkrow
+Honchkrow = Team_Rocket_s_Honchkrow
+Porygon = Team_Rocket_s_Porygon
+Porygon2 = Team_Rocket_s_Porygon2
+Porygon_Z = Team_Rocket_s_Porygon_Z
+Articuno = Team_Rocket_s_Articuno
+Ariana = Team_Rocket_s_Ariana
+Archer = Team_Rocket_s_Archer
+Giovanni = Team_Rocket_s_Giovanni
+Petrel = Team_Rocket_s_Petrel
+Proton = Team_Rocket_s_Proton
+Factory = Team_Rocket_s_Factory
+Rocket_Energy = Team_Rocket_s_Energy
+
+TEAM_ROCKET_BASICS = {Murkrow, Porygon}
+TEAM_ROCKET_EVOLUTIONS = {Honchkrow, Porygon2, Porygon_Z}
+TEAM_ROCKET_POKEMON = TEAM_ROCKET_BASICS | TEAM_ROCKET_EVOLUTIONS | {Articuno}
+TEAM_ROCKET_SUPPORTERS = {
+    Team_Rocket_s_Ariana,
+    Team_Rocket_s_Archer,
+    Team_Rocket_s_Giovanni,
+    Team_Rocket_s_Petrel,
+    Team_Rocket_s_Proton,
+}
+ROCKET_SUPPORT_DISCARD_PRIORITY = {
+    Team_Rocket_s_Proton: 0,
+    Team_Rocket_s_Archer: 1,
+    Team_Rocket_s_Giovanni: 2,
+    Team_Rocket_s_Petrel: 3,
+    Team_Rocket_s_Ariana: 4,
+}
+ROCKET_FEATHERS_ATTACK_ID = 1285
+POLYGON2_ATTACK_ID = 670
+POLYGONZ_ATTACK_ID = 671
 
 UNNECESSARY = -10000000
 
@@ -107,17 +143,21 @@ card_counts: defaultdict[int, int] = defaultdict(int)
 serial_set: set[int] = set()
 plan_a = AttackPlan()
 plan_b = AttackPlan()
+preferred_attack_id = ROCKET_FEATHERS_ATTACK_ID
+rocket_feathers_required_support = 0
+rocket_feathers_discard_budget = 0
+rocket_support_discard_count = 0
+opponent_active_hp = 0
+rocket_feathers_discard_indices: set[int] = set()
 
 
 def no_damage_dex(id: int) -> bool:
-    """Checks if the defending Pokémon possesses innate immunities preventing Dragapult ex from hitting it."""
-    # Drednaw, Milotic ex, Sylveon, Crustle
-    return id == 158 or id == 207 or id == 330 or id == 345
+    """Returns whether the target should be deprioritized for direct Rocket Feathers damage."""
+    return id in {158, 207, 330, 345}
 
 
 def no_damage_counter(pokemon: Pokemon) -> bool:
-    """Checks if a target prevents placement of Phantom Dive's 6 bench damage counters (via abilities/Energy)."""
-    # Poltchageist, Empoleon ex, Skeledirge, Milotic ex, Misty's Magikarp, Antique Cover Fossil
+    """Returns whether the target is bad for counter-based bench damage planning."""
     if (
         pokemon.id == 28
         or pokemon.id == 199
@@ -135,7 +175,7 @@ def no_damage_counter(pokemon: Pokemon) -> bool:
 
 
 def prize_count(pokemon: Pokemon, is_attack_damage: bool) -> int:
-    """Calculates how many Prize cards a Pokémon yields upon being Knocked Out, factoring in modifiers."""
+    """Calculate Prize cards yielded by KOing opponent's Pokémon."""
     data = card_table[pokemon.id]
     count = 3 if data.megaEx else 2 if data.ex else 1
     if is_attack_damage:
@@ -166,6 +206,8 @@ def pokemon_score(pokemon: Pokemon, is_attack_damage: bool) -> int:
     if id == 112 and len(pokemon.energies) >= 1:  # Munkidori
         score += 300
     score += pokemon.hp
+    if pokemon.id == Articuno:
+        score -= 500
     return score
 
 
@@ -246,91 +288,53 @@ def main_option_proc(obs: Observation, damage: int):
     global can_attack
     global can_main_attack
     global can_energy_attach
+    global preferred_attack_id
+    global rocket_feathers_required_support
+    global rocket_feathers_discard_budget
+    global rocket_support_discard_count
+    global opponent_active_hp
+    global rocket_feathers_discard_indices
 
     can_switch = False
     can_attack = False
     can_main_attack = False
     can_energy_attach = False
+    preferred_attack_id = ROCKET_FEATHERS_ATTACK_ID
     for o in select.option:
         if o.type == OptionType.RETREAT:
             can_switch = True
         elif o.type == OptionType.ATTACK:
             can_attack = True
-            if o.attackId == 154:  # Phantom Dive
+            if o.attackId == ROCKET_FEATHERS_ATTACK_ID:
                 can_main_attack = True
 
     plan_a.attack = -1
     plan_b.attack = -1
-    if not can_main_attack and not (bench_attacker and can_switch):
+    rocket_feathers_required_support = 0
+    rocket_feathers_discard_budget = 0
+    rocket_support_discard_count = 0
+    rocket_feathers_discard_indices = set()
+
+    opponent_active_hp = op_state.active[0].hp if len(op_state.active) > 0 else 0
+    if opponent_active_hp > 0:
+        rocket_feathers_required_support = (opponent_active_hp + 59) // 60
+
+    if not can_attack:
         return
 
-    cards = [op_state.active[0]]
-    for pokemon in op_state.bench:
-        cards.append(pokemon)
-    counter_indices = []
-    ci = []
-    ci.append(0)
-    remain_damage = 60
-    while ci:
-        index = ci[-1]
-        hp = cards[index].hp
-        if remain_damage >= hp:
-            counter_indices.append(ci.copy())
-            if index < len(cards) - 1:
-                remain_damage -= hp
-                ci.append(index + 1)
-                continue
-        if index == len(cards) - 1:
-            ci.pop()
-            if ci:
-                remain_damage += cards[ci[-1]].hp
-        if ci:
-            ci[-1] += 1
-    counter_indices.append([])
+    team_rocket_supporters_in_hand = 0
+    for card in my_state.hand:
+        if card.id in TEAM_ROCKET_SUPPORTERS:
+            team_rocket_supporters_in_hand += 1
 
-    remain_prize = len(my_state.prize)
-    plan_score = 0
-    for i, pokemon in enumerate(cards):
-        base_prize_count = 0
-        base_score = pokemon_score(pokemon, True)
-        active_damage = 0 if no_damage_dex(pokemon.id) else damage
-        if pokemon.hp <= active_damage:
-            base_prize_count += prize_count(pokemon, True)
+    if rocket_feathers_required_support > 0:
+        if team_rocket_supporters_in_hand >= rocket_feathers_required_support:
+            rocket_feathers_discard_budget = rocket_feathers_required_support
         else:
-            base_score *= active_damage / pokemon.hp
-        ci = []
-        max_score = base_score
-        if remain_prize <= base_prize_count:
-            max_score = 50000
-        else:
-            for indices in counter_indices:
-                if i in indices:
-                    continue
-                prize = base_prize_count
-                score = base_score
-                for index in indices:
-                    prize += prize_count(cards[index], False)
-                    score += pokemon_score(cards[index], False)
-                if remain_prize <= prize:
-                    score = 50000
-                else:
-                    if prize >= 2:
-                        if remain_prize <= 4:
-                            score -= 1200
-                    elif prize == 1:
-                        score -= 300
-                    else:
-                        score += 1200
-                if max_score < score:
-                    max_score = score
-                    ci = indices
-        if plan_score < max_score:
-            plan_score = max_score
-            plan_a.attack = i
-            plan_a.counter = ci
-        if i == 0:
-            plan_b.attack = plan_a.attack
-            plan_b.counter = plan_a.counter
+            rocket_feathers_discard_budget = max(0, team_rocket_supporters_in_hand - 1)
+
+    plan_a.attack = 0 if can_main_attack else -1
+    plan_b.attack = plan_a.attack
 
 
 def agent(obs_dict: dict) -> list[int]:
@@ -451,246 +455,205 @@ def agent(obs_dict: dict) -> list[int]:
         discard_counts[card.id] += 1
 
     def attach_score(attach_id: int, pokemon: Pokemon, active: bool) -> int:
+        """Score for attaching a card to a Pokémon."""
         energy_count = len(pokemon.energies)
+
+        # Tool attachment - high priority for all
         if card_table[attach_id].cardType == CardType.TOOL:
-            # Attach tool
             score = 60000
             if active:
-                score += 1000
+                score += 2000  # Prefer active Pokémon for tools
+            # Specific tool priorities
+            if attach_id == Air_Balloon:
+                if pokemon.id == Articuno:
+                    score += 5000  # Critical for wall Pokémon
+                else:
+                    score += 1000
+            elif attach_id == Brave_Bangle:
+                if pokemon.id in {Murkrow, Honchkrow}:
+                    score += 3000  # Boost main attacker
+                else:
+                    score += 1000
             return score
 
-        # Attach energy
-        if pokemon.id == Budew:
+        # Energy attachment - Rocket team preference
+        if pokemon.id == Articuno:
+            # Never attach energy to Articuno - it's a wall
             return -1
-        elif (
-            pokemon.id == Meowth_ex
-            or pokemon.id == Fezandipiti_ex
-            or pokemon.id == Latias_ex
-        ):
-            if (
-                active
-                and not can_switch
-                and not my_state.asleep
-                and not my_state.paralyzed
-            ):
-                if bench_attacker or field_counts[Budew] >= 1:
-                    return 22000
-                else:
-                    return 18000
+
+        # Rocket's Energy - primary choice for Honchkrow line
+        if attach_id == Rocket_Energy:
+            if pokemon.id in {Murkrow, Honchkrow}:
+                score = 50000  # Very high - provides P+D support
+                if active and len(pokemon.energies) < 2:
+                    score += 5000  # Attack setup priority
+                return score
             else:
-                return -1
-        if active and can_main_attack:
-            return -1
-        score = 20000
-        if energy_count >= 2:
-            if (
-                active
-                and not can_switch
-                and not my_state.asleep
-                and not my_state.paralyzed
-            ):
-                score += 200
+                return 100  # Low priority for other Pokémon
+
+        # Ignition Energy - ONLY for immediate attack
+        if attach_id == Ignition_Energy:
+            if pokemon.id == Honchkrow and active and can_main_attack:
+                # Check if can KO with this energy
+                if len(op_state.active) > 0:
+                    damage_with_ignition = opponent_active_hp  # Placeholder
+                    if can_main_attack and len(op_state.active) > 0:
+                        return 35000  # High value for finishing blow
+                    else:
+                        return -1
             else:
-                return -1
-        elif energy_count == 1:
-            if attach_id == pokemon.energyCards[0].id:
-                return -1
-            if pokemon.id == Dragapult_ex:
-                score += 250
-            elif pokemon.id == Dreepy:
-                score -= 150
-            else:
-                score -= 200
-            if active:
-                score += 200
-        else:  # energy_count == 0
-            if active:
-                if bench_attacker:
-                    score += 400
-            else:
-                if pokemon.id == Dragapult_ex:
-                    score += 150
-                elif pokemon.id == Dreepy:
-                    score += 100
-                else:
-                    score += 50
-                if bench_attacker:
-                    score -= 200
-        if no_more_dex and (pokemon.id == Dreepy or pokemon.id == Drakloak):
-            score -= 500
-        return score
+                return -1  # Never use for setup
+
+        # Other energies - very low priority for this deck
+        # (Not Rocket or Ignition energy types)
+        return 100  # Minimal value for non-Rocket energies
 
     def hand_score(id: int, ignore_count: bool):
+        """Evaluate hand card value for Team Rocket's Honchkrow deck."""
         score = 0
-        if id == Dreepy:
-            if main_pokemon_count >= 3:
-                score = 1000
+
+        # Pokémon cards - Main attackers
+        if id == Murkrow:
+            # Setup for Honchkrow evolution
+            if field_counts[Honchkrow] == 0 and deck_counts[Honchkrow] > 0:
+                score = 50000  # Priority: set up Honchkrow line
             else:
-                score = 18000
-        elif id == Drakloak:
-            if can_evolve_dreepy:
-                score = 20000
+                score = 5000
+        elif id == Honchkrow:
+            # Main attacker - Rocket Feathers is our primary win condition
+            if len(my_state.active) > 0 and my_state.active[0].id != Honchkrow:
+                score = 70000  # Very high priority to get into active
+            elif field_counts[Honchkrow] == 0:
+                score = 65000  # Priority to set up bench Honchkrow
             else:
                 score = 3000
-        elif id == Dragapult_ex:
-            if no_more_dex:
-                score = UNNECESSARY
-            elif can_evolve_dreepy and hand_counts[Rare_Candy] >= 1 and not no_item:
-                score = 40000
-            elif can_evolve_drakloak:
-                if field_counts[id] == 0:
-                    score = 30000
-                elif field_counts[id] == 1:
-                    score = 10000
-                else:
-                    score = 50
+        elif id == Porygon:
+            # Endgame alternative attacker - low priority
+            if rocket_support_discard_count >= 8:
+                score = 25000  # Setup when lots of supporters already discarded
             else:
-                if field_counts[id] >= 2:
-                    score = 50
-                else:
-                    score = 2000
-        elif id == Fezandipiti_ex:
-            if pre_ko:
-                score = 50000
-            elif prize_diff <= -2:
-                score = 5
-            elif len(op_state.prize) == 1:
-                score = UNNECESSARY
-        elif id == Latias_ex:
-            if (
-                active_id == Fezandipiti_ex
-                or active_id == Meowth_ex
-                or active_id == Dreepy
-            ):
-                if field_counts[Drakloak] + field_counts[Dragapult_ex] == 0:
-                    score = 28000
-                else:
-                    score = 15000
+                score = 1000
+        elif id == Porygon2:
+            # Stage 1 evolution of Porygon
+            if field_counts[Porygon] > 0 and rocket_support_discard_count >= 6:
+                score = 22000
             else:
-                score = 10
-        elif id == Budew:
-            if (
-                field_counts[id] + field_counts[Drakloak] + field_counts[Dragapult_ex]
-                >= 1
-            ):
-                score = UNNECESSARY
-            elif state.turn >= 2:
-                score = 30000
-        elif id == Meowth_ex:
-            if (
-                support_count > hand_counts[Boss_Orders]
-                or stadium_id == Team_Rocket_Watchtower
-            ):
-                score = 5
-            elif state.supporterPlayed:
-                score = 40
+                score = 500
+        elif id == Porygon_Z:
+            # Stage 2 final form - highest endgame potential
+            if field_counts[Porygon2] > 0 and rocket_support_discard_count >= 8:
+                score = 30000  # Very strong if we have enough discarded supporters
             else:
-                score = 35000
-        elif id == Rare_Candy:
-            if no_more_dex:
-                score = UNNECESSARY
-            elif can_evolve_dreepy and hand_counts[Dragapult_ex] >= 1:
-                score = 40000
-        elif id == Unfair_Stamp:
-            if pre_ko:
-                score = 80000
-            elif len(op_state.prize) == 1:
-                score = UNNECESSARY
+                score = 100
+        elif id == Articuno:
+            # Bench protection wall - no energy attachment
+            if field_counts[Articuno] == 0 and len(op_state.prize) >= 2:
+                score = 8000  # Setup bench wall
             else:
-                score = 80
-        elif id == Buddy_Buddy_Poffin:
-            count = deck_counts[Dreepy]
-            if count == 0:
-                score = UNNECESSARY
+                score = 100
+
+        # Supporter cards - Rocket Team supporters
+        elif id == Ariana:
+            # Draw support - CRITICAL: preserve when possible for next turn consistency
+            # Value: higher with fewer cards in hand (can draw more)
+            remaining_hand = 8 - len(my_state.hand)
+            if remaining_hand > 0:
+                score = 50000 + (remaining_hand * 1000)  # Strong draw incentive
             else:
-                if (
-                    state.turn <= 2
-                    and field_counts[Budew] == 0
-                    and deck_counts[Budew] >= 1
-                ):
-                    count += 1
-                if count >= 2:
-                    score = 35000
+                score = 30000  # Still valuable even at hand limit
+        elif id == Proton:
+            # Support fuel - lowest discard priority
+            score = 200  # Very low value - should be discarded first to Rocket Feathers
+        elif id == Archer:
+            # Support fuel - second lowest discard priority
+            score = 400  # Low value - second choice for discard
+        elif id == Giovanni:
+            # Support fuel - third lowest discard priority
+            score = 600  # Lower-mid value - third choice for discard
+        elif id == Petrel:
+            # Support fuel - fourth lowest discard priority (train searcher but value as fuel)
+            score = 800  # Lower-mid value - fourth choice for discard
+
+        # Trainer cards - Items
+        elif id == Roto_Stick:
+            # Supporter search from deck top
+            if deck_counts[Ariana] > 0:
+                score = 40000  # High value if Ariana still in deck
+            else:
+                score = 15000
+        elif id == Air_Balloon:
+            # Retreat cost reduction - for Articuno wall or switching out
+            if field_counts[Articuno] > 0 and len(op_state.active) > 0:
+                score = 12000  # Useful for wall Pokémon
+            else:
+                score = 2000
+        elif id == Brave_Bangle:
+            # Extra damage to opponent EX - helps Rocket Feathers or Polygon
+            if len(op_state.active) > 0 and card_table[op_state.active[0].id].ex:
+                score = 15000  # Boost if opponent has EX
+            else:
+                score = 3000
+        elif id == Miracle_Headset:
+            # Recover supporters from discard - very valuable for consistency
+            if len(my_state.discard) > 0:
+                score = 35000  # Good value for grind game
+            else:
+                score = 5000
+        elif id == Team_Rocket_s_Transceiver:
+            # Specific Rocket supporter search
+            score = 38000  # High consistency value
         elif id == Night_Stretcher:
-            for i in discard_counts:
-                if discard_counts[i] >= 1:
-                    card_type = card_table[i].cardType
+            # Recover Pokémon or Basic Energy from discard
+            best_recover = 100
+            for card_id in discard_counts:
+                if discard_counts[card_id] > 0:
+                    card_type = card_table[card_id].cardType
                     if (
                         card_type == CardType.POKEMON
                         or card_type == CardType.BASIC_ENERGY
                     ):
-                        score = max(score, hand_score(i, ignore_count))
-        elif id == Crushing_Hammer:
-            score = 20
-        elif id == Ultra_Ball:
-            if main_pokemon_count <= 2 or field_counts[Dreepy] >= 1:
-                score = 70
-            else:
-                score = 5
+                        best_recover = max(
+                            best_recover, hand_score(card_id, ignore_count)
+                        )
+            score = best_recover
         elif id == Poke_Pad:
-            score = max(
-                hand_score(Dreepy, ignore_count), hand_score(Drakloak, ignore_count)
-            )
-        elif id == Lucky_Helmet:
-            score = 15
-        elif id == Boss_Orders:
-            if plan_a.attack > 0:
-                score = 60000
-        elif id == Crispin:
-            if not ignore_count or support_count == 0:
-                if (
-                    deck_counts[Basic_Fire_Energy] == 0
-                    or deck_counts[Basic_Psychic_Energy] == 0
-                ):
-                    score = 10
-                if (
-                    not can_main_attack
-                    and not bench_attacker
-                    and field_counts[Dragapult_ex] >= 1
-                ):
-                    score = 55000
-                else:
-                    score = 25000
-        elif id == Brock_Scouting:
-            if not ignore_count or support_count == 0:
-                if (
-                    state.turn == 2
-                    and field_counts[Budew] + field_counts[Latias_ex] == 0
-                ):
-                    score = 50000
-                else:
-                    score = 30000
-        elif id == Lillie_Determination:
-            if not ignore_count or support_count == 0:
-                score = 45000
-        elif id == Team_Rocket_Watchtower:
-            if stadium_id != 0 and stadium_id != Team_Rocket_Watchtower:
-                score = 4000
-        elif id == Basic_Fire_Energy or id == Basic_Psychic_Energy:
-            if can_main_attack and (
-                len(op_state.prize) <= 2
-                or (bench_attacker and len(op_state.prize) <= 4)
-            ):
-                score = UNNECESSARY
+            # Pokémon search - look for Honchkrow or Murkrow evolution line
+            murkrow_score = hand_score(Murkrow, ignore_count)
+            honchkrow_score = hand_score(Honchkrow, ignore_count)
+            score = max(murkrow_score, honchkrow_score)
+        elif id == Team_Rocket_s_Factory:
+            # Stadium - draw 2 after playing Rocket supporter
+            if state.supporterPlayed or (not ignore_count and support_count > 0):
+                score = 35000  # Good value for draw acceleration
             else:
-                max_score = -10000
-                for pokemon in my_state.active:
-                    if pokemon == None:
-                        continue
+                score = 2000
+        elif id == Team_Rocket_s_Energy:
+            # Rocket-specific energy - attach to main attackers
+            max_score = 0
+            for pokemon in my_state.active:
+                if pokemon and pokemon.id in {Murkrow, Honchkrow, Articuno}:
                     max_score = max(max_score, attach_score(id, pokemon, True))
-                for pokemon in my_state.bench:
+            for pokemon in my_state.bench:
+                if pokemon and pokemon.id in {Murkrow, Honchkrow, Articuno}:
                     max_score = max(max_score, attach_score(id, pokemon, False))
-                score = max_score - 5000
-                if can_main_attack or bench_attacker:
-                    score /= 10
-
-        if not ignore_count and hand_counts[id] > 0:
-            if id == Drakloak and hand_counts[id] < evolve_dreepy_count:
-                score -= 10
-            elif id == Dreepy:
-                score -= 100
+            score = max_score if max_score > 0 else 2000
+        elif id == Ignition_Energy:
+            # Temporary energy - only use if can attack THIS turn and KO
+            if can_main_attack and len(op_state.active) > 0:
+                if my_state.active and my_state.active[0].id == Honchkrow:
+                    if opponent_active_hp <= rocket_feathers_required_support * 60:
+                        score = 25000  # Good for finishing blow
+                    else:
+                        score = -1  # Don't waste on missed KO
+                else:
+                    score = -1
             else:
-                score -= 100000
+                score = -1  # Never use for setup
+
+        # Penalty for duplicates in hand
+        if not ignore_count and hand_counts[id] > 0:
+            score -= 100000  # Strong penalty for having multiples already
+
         return score
 
     global use_support
@@ -848,100 +811,141 @@ def agent(obs_dict: dict) -> list[int]:
         elif o.type == OptionType.PLAY:
             card = get_card(obs, AreaType.HAND, o.index, my_index)
             card_score = hand_scores[o.index]
-            if card.id == Dreepy:
-                score = 51000
-            elif card.id == Fezandipiti_ex:
-                if card_score > 0:
-                    score = 53000
+
+            # Pokémon cards - Main lineup
+            if card.id == Murkrow:
+                # Setup for Honchkrow evolution
+                if field_counts[Honchkrow] == 0 and deck_counts[Honchkrow] > 0:
+                    score = 65000  # High priority: build Honchkrow line
+                else:
+                    score = 8000
+            elif card.id == Honchkrow:
+                # Main attacker - very high priority
+                score = 70000  # Core win condition
+            elif card.id == Porygon:
+                # Endgame alternative - low priority
+                if rocket_support_discard_count >= 8:
+                    score = 25000
+                else:
+                    score = 2000
+            elif card.id == Porygon2:
+                # Stage 1 - low priority
+                if rocket_support_discard_count >= 6:
+                    score = 20000
+                else:
+                    score = 500
+            elif card.id == Porygon_Z:
+                # Stage 2 - moderate endgame priority
+                if rocket_support_discard_count >= 8:
+                    score = 30000
+                else:
+                    score = 100
+            elif card.id == Articuno:
+                # Wall Pokémon - conditional setup
+                if field_counts[Articuno] == 0 and len(op_state.prize) >= 2:
+                    score = 12000  # Bench wall setup
+                else:
+                    score = 100
+
+            # Supporter cards - Team Rocket supporters
+            elif card.id == Ariana:
+                # Draw support - preserve as much as possible
+                if card_score > 0 and not state.supporterPlayed:
+                    score = 55000  # Very high priority
                 else:
                     score = -1
-            elif card.id == Latias_ex:
-                if active_id != Drakloak and active_id != Dragapult_ex:
-                    score = 51000
+            elif card.id == Proton:
+                # Support fuel - conditional
+                if card_score > 0 and not state.supporterPlayed:
+                    score = 5000  # Lower priority for discard
                 else:
                     score = -1
-            elif card.id == Budew:
-                if field_counts[Budew] == 0 and field_counts[Dragapult_ex] == 0:
-                    score = 52000
+            elif card.id == Archer:
+                # Support fuel - conditional
+                if card_score > 0 and not state.supporterPlayed:
+                    score = 7000
                 else:
                     score = -1
-            elif card.id == Meowth_ex:
-                if state.supporterPlayed or stadium_id == Team_Rocket_Watchtower:
-                    score = -1
-                elif support_count == 0:
-                    score = 50000
-                elif (
-                    support_count == hand_counts[Boss_Orders] and not plan_a.attack <= 0
-                ):
-                    score = 50000
+            elif card.id == Giovanni:
+                # Support fuel - conditional
+                if card_score > 0 and not state.supporterPlayed:
+                    score = 9000
                 else:
                     score = -1
-            elif card.id == Rare_Candy:
-                if no_more_dex:
-                    score = -1
-                else:
-                    score = 75000
-            elif card.id == Unfair_Stamp:
-                score = 15000
-            elif card.id == Night_Stretcher:
-                if card_score >= 18000:
-                    score = 42000
+            elif card.id == Petrel:
+                # Support fuel - conditional
+                if card_score > 0 and not state.supporterPlayed:
+                    score = 11000
                 else:
                     score = -1
-            elif card.id == Crushing_Hammer:
-                score = 40000
-            elif card.id == Boss_Orders:
-                if card.id == use_support:
-                    score = 35000
+
+            # Trainer cards - Items & Stadium
+            elif card.id == Roto_Stick:
+                if card_score >= 0:
+                    score = 40000  # High value supporter search
                 else:
                     score = -1
-            elif card.id == Lillie_Determination:
-                if card.id == use_support:
-                    score = 14000
-                else:
-                    score = -1
-            elif card.id == Team_Rocket_Watchtower:
-                if stadium_id > 0 or state.turn == 1:
-                    score = 80000
-                else:
-                    score = -1
-            elif no_draw:
-                score = -1
-            elif card.id == Buddy_Buddy_Poffin:
-                if deck_counts[Dreepy] > 0:
-                    score = 46000
-                else:
-                    score = -1
-            elif card.id == Ultra_Ball:
-                if negative_hand_count >= 2:
-                    score = 44000
+            elif card.id == Team_Rocket_s_Transceiver:
+                if card_score >= 0:
+                    score = 42000  # Specific Rocket supporter search
                 else:
                     score = -1
             elif card.id == Poke_Pad:
-                if deck_counts[Dreepy] + deck_counts[Drakloak] > 0:
-                    score = 45000
+                if deck_counts[Murkrow] + deck_counts[Honchkrow] > 0:
+                    score = 45000  # High priority evolution line search
                 else:
                     score = -1
-            elif card.id == Crispin or card.id == Brock_Scouting:
-                if card.id == use_support:
-                    score = 35000
+            elif card.id == Night_Stretcher:
+                if card_score >= 8000:
+                    score = 42000  # Recover from discard
                 else:
                     score = -1
+            elif card.id == Miracle_Headset:
+                if len(my_state.discard) > 0:
+                    score = 35000  # Recover supporters from discard
+                else:
+                    score = -1
+            elif card.id == Team_Rocket_s_Factory:
+                if state.supporterPlayed or support_count > 0:
+                    score = 40000  # Stadium for draw acceleration
+                else:
+                    score = -1
+            elif card.id == Air_Balloon:
+                score = 15000  # Tool - useful for wall or switching
+            elif card.id == Brave_Bangle:
+                if len(op_state.active) > 0 and card_table[op_state.active[0].id].ex:
+                    score = 18000
+                else:
+                    score = 5000
+            elif no_draw:
+                score = -1
+            else:
+                # Default handling for other items/energies
+                score = card_score
         elif o.type == OptionType.ATTACH:
             card = get_card(obs, o.area, o.index, my_index)
             pokemon = get_card(obs, o.inPlayArea, o.inPlayIndex, my_index)
             score = attach_score(card.id, pokemon, o.inPlayArea == AreaType.ACTIVE)
         elif o.type == OptionType.EVOLVE:
             pokemon = get_card(obs, o.inPlayArea, o.inPlayIndex, my_index)
-            score += len(pokemon.energies)
-            if pokemon.id == Dreepy:
-                score += 30000
-            elif field_counts[Dragapult_ex] >= 2 or (
-                field_counts[Dragapult_ex] == 1 and len(op_state.prize) <= 2
-            ):
-                score = -1
+
+            # Murkrow -> Honchkrow: Highest evolution priority
+            if pokemon.id == Murkrow:
+                score = 120000  # Critical: evolve ASAP to get main attacker
+            # Porygon -> Porygon2: Endgame evolution
+            elif pokemon.id == Porygon:
+                if rocket_support_discard_count >= 5:
+                    score = 50000  # Moderate value if already discarded supporters
+                else:
+                    score = 1000
+            # Porygon2 -> Porygon-Z: Endgame evolution
+            elif pokemon.id == Porygon2:
+                if rocket_support_discard_count >= 8:
+                    score = 70000  # High value in endgame
+                else:
+                    score = 2000
             else:
-                score += 70000
+                score = 10000 + len(pokemon.energies) * 100
         elif o.type == OptionType.ABILITY:
             card = get_card(obs, o.area, o.index, my_index)
             if no_draw:
