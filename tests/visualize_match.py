@@ -74,6 +74,7 @@ def main() -> None:
             deck_a = load_deck(os.path.dirname(args.agent_a))
             deck_b = load_deck(os.path.dirname(args.agent_b))
         except Exception as e:
+
             print(f"Error loading decks: {e}")
             sys.exit(1)
 
@@ -97,6 +98,9 @@ def main() -> None:
         print("Done. Please open the HTML file in a web browser to view the match.")
 
     except Exception as e:
+        import traceback
+
+        traceback.print_exc()
         print(f"Error executing match visualization: {e}")
         sys.exit(1)
 

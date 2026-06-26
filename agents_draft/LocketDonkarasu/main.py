@@ -65,18 +65,18 @@ Ignition_Energy = 17  # ×4
 # These names are retained so the rest of the file can be updated incrementally.
 Dreepy = Team_Rocket_s_Murkrow
 Drakloak = Team_Rocket_s_Honchkrow
-Dragapult_ex = Team_Rocket_s_Porygon
-Fezandipiti_ex = Team_Rocket_s_Porygon2
-Latias_ex = Team_Rocket_s_Porygon_Z
+Porygon = Team_Rocket_s_Porygon
+Porygon2 = Team_Rocket_s_Porygon2
+Porygon_Z = Team_Rocket_s_Porygon_Z
 Budew = Team_Rocket_s_Articuno
 Meowth_ex = Team_Rocket_s_Articuno
 Rare_Candy = Air_Balloon
 Unfair_Stamp = Brave_Bangle
 Buddy_Buddy_Poffin = Miracle_Headset
-Night_Stretcher = Team_Rocket_s_Transceiver
+
 Crushing_Hammer = Night_Stretcher
 Ultra_Ball = Poke_Pad
-Poke_Pad = Team_Rocket_s_Ariana
+
 Lucky_Helmet = Team_Rocket_s_Archer
 Boss_Orders = Team_Rocket_s_Giovanni
 Crispin = Team_Rocket_s_Petrel
@@ -118,6 +118,7 @@ ROCKET_SUPPORT_DISCARD_PRIORITY = {
     Team_Rocket_s_Ariana: 4,
 }
 ROCKET_FEATHERS_ATTACK_ID = 1285
+HAMMER_IN_ATTACK_ID = 1286  # ← 追加
 POLYGON2_ATTACK_ID = 670
 POLYGONZ_ATTACK_ID = 671
 
@@ -135,6 +136,7 @@ can_main_attack = False
 can_energy_attach = False
 use_support = 0  # The Supporter card planned for use.
 bench_attacker = False  # Whether there is a Benched Pokémon that is ready to attack
+polygon_mode = False
 pre_turn_log: list[Log] = []
 current_turn_log: list[Log] = []
 
@@ -144,7 +146,10 @@ serial_set: set[int] = set()
 plan_a = AttackPlan()
 plan_b = AttackPlan()
 preferred_attack_id = ROCKET_FEATHERS_ATTACK_ID
+rocket_feathers_remaining = 0
 rocket_feathers_required_support = 0
+rocket_feathers_can_ko = False
+rocket_feathers_keep_support_id = None
 rocket_feathers_discard_budget = 0
 rocket_support_discard_count = 0
 opponent_active_hp = 0
@@ -290,16 +295,26 @@ def main_option_proc(obs: Observation, damage: int):
     global can_energy_attach
     global preferred_attack_id
     global rocket_feathers_required_support
+    global rocket_feathers_remaining
     global rocket_feathers_discard_budget
     global rocket_support_discard_count
     global opponent_active_hp
     global rocket_feathers_discard_indices
+    global rocket_feathers_can_ko
+    global rocket_feathers_keep_support_id
+    global polygon_mode
+
+    polygon_mode = rocket_support_discard_count >= 16
+
+    rocket_feathers_remaining = 0
 
     can_switch = False
     can_attack = False
     can_main_attack = False
     can_energy_attach = False
+
     preferred_attack_id = ROCKET_FEATHERS_ATTACK_ID
+
     for o in select.option:
         if o.type == OptionType.RETREAT:
             can_switch = True
@@ -310,28 +325,53 @@ def main_option_proc(obs: Observation, damage: int):
 
     plan_a.attack = -1
     plan_b.attack = -1
+
     rocket_feathers_required_support = 0
     rocket_feathers_discard_budget = 0
+    rocket_feathers_can_ko = False
+    rocket_feathers_keep_support_id = None
     rocket_support_discard_count = 0
     rocket_feathers_discard_indices = set()
 
-    opponent_active_hp = op_state.active[0].hp if len(op_state.active) > 0 else 0
+    team_rocket_supporters_in_hand = sum(
+        1 for c in my_state.hand if c.id in TEAM_ROCKET_SUPPORTERS
+    )
+
+    opponent_active_hp = (
+        op_state.active[0].hp
+        if len(op_state.active) > 0 and op_state.active[0] is not None
+        else 0
+    )
+
+    # Rocket Feathersの捨て枚数決定
     if opponent_active_hp > 0:
-        rocket_feathers_required_support = (opponent_active_hp + 59) // 60
+        need_support = (opponent_active_hp + 59) // 60
+        rocket_feathers_required_support = need_support
+
+        if team_rocket_supporters_in_hand >= need_support:
+            # 倒せる
+            rocket_feathers_can_ko = True
+            rocket_feathers_discard_budget = need_support
+        else:
+            # 倒せない
+            rocket_feathers_can_ko = False
+
+            best_support_id = max(
+                (c.id for c in my_state.hand if c.id in TEAM_ROCKET_SUPPORTERS),
+                key=lambda sid: ROCKET_SUPPORT_DISCARD_PRIORITY.get(sid, 99),
+                default=None,
+            )
+
+            rocket_feathers_keep_support_id = best_support_id
+
+            rocket_feathers_discard_budget = max(
+                0,
+                team_rocket_supporters_in_hand
+                - (1 if best_support_id is not None else 0),
+            )
 
     if not can_attack:
         return
-
-    team_rocket_supporters_in_hand = 0
-    for card in my_state.hand:
-        if card.id in TEAM_ROCKET_SUPPORTERS:
-            team_rocket_supporters_in_hand += 1
-
-    if rocket_feathers_required_support > 0:
-        if team_rocket_supporters_in_hand >= rocket_feathers_required_support:
-            rocket_feathers_discard_budget = rocket_feathers_required_support
-        else:
-            rocket_feathers_discard_budget = max(0, team_rocket_supporters_in_hand - 1)
 
     plan_a.attack = 0 if can_main_attack else -1
     plan_b.attack = plan_a.attack
@@ -355,6 +395,8 @@ def agent(obs_dict: dict) -> list[int]:
 
     global pre_turn_log
     global current_turn_log
+    global rocket_feathers_required_support
+    global rocket_feathers_remaining
 
     state = obs.current
     select = obs.select
@@ -438,12 +480,12 @@ def agent(obs_dict: dict) -> list[int]:
                 evolve_dreepy_count += 1
             elif card.id == Drakloak:
                 can_evolve_drakloak = True
-        if card.id == Dragapult_ex and len(card.energies) >= 2:
+        if card.id == Porygon and len(card.energies) >= 2:
             bench_attacker = True
     main_pokemon_count = (
-        field_counts[Dreepy] + field_counts[Drakloak] + field_counts[Dragapult_ex]
+        field_counts[Dreepy] + field_counts[Drakloak] + field_counts[Porygon]
     )
-    no_more_dex = field_counts[Dragapult_ex] * 2 >= len(op_state.prize)
+    no_more_dex = field_counts[Porygon] * 2 >= len(op_state.prize)
 
     stadium_id = 0
     for card in state.stadium:
@@ -484,29 +526,70 @@ def agent(obs_dict: dict) -> list[int]:
         # Rocket's Energy - primary choice for Honchkrow line
         if attach_id == Rocket_Energy:
             if pokemon.id in {Murkrow, Honchkrow}:
-                score = 50000  # Very high - provides P+D support
-                if active and len(pokemon.energies) < 2:
-                    score += 5000  # Attack setup priority
+
+                rocket_energy_count = sum(
+                    1 for e in pokemon.energyCards if e.id == Rocket_Energy
+                )
+
+                if rocket_energy_count > 0:
+                    return -1
+
+                score = 50000
+                if active:
+                    score += 5000
                 return score
-            else:
-                return 100  # Low priority for other Pokémon
 
-        # Ignition Energy - ONLY for immediate attack
+            return -1
         if attach_id == Ignition_Energy:
-            if pokemon.id == Honchkrow and active and can_main_attack:
-                # Check if can KO with this energy
-                if len(op_state.active) > 0:
-                    damage_with_ignition = opponent_active_hp  # Placeholder
-                    if can_main_attack and len(op_state.active) > 0:
-                        return 35000  # High value for finishing blow
-                    else:
-                        return -1
-            else:
-                return -1  # Never use for setup
+            #
+            # Honchkrow
+            #
+            if pokemon.id == Honchkrow and active:
+                rocket_energy_count = sum(
+                    1 for e in pokemon.energyCards if e.id == Rocket_Energy
+                )
 
-        # Other energies - very low priority for this deck
-        # (Not Rocket or Ignition energy types)
-        return 100  # Minimal value for non-Rocket energies
+                if rocket_energy_count >= 2:
+                    return -1
+
+                if rocket_energy_count == 1:
+                    supporters_in_hand = sum(
+                        1 for c in my_state.hand if c.id in TEAM_ROCKET_SUPPORTERS
+                    )
+
+                    effective_discard = max(0, supporters_in_hand - 1)
+
+                    rocket_feathers_damage = effective_discard * 60
+
+                    if rocket_feathers_damage >= 100:
+                        return -1
+
+                return 35000
+
+            #
+            # Porygon2 / Porygon-Z
+            #
+            if (
+                polygon_mode
+                and active
+                and pokemon.id in {Porygon2, Porygon_Z}
+                and can_attack
+            ):
+                # 過剰付与を防止
+                if len(pokemon.energies) > 0:
+                    return -1
+
+                score = 45000
+
+                # 場にこの1匹しかいないならさらに優先
+                field_count = len(my_state.active) + len(my_state.bench)
+
+                if field_count == 1:
+                    score += 50000
+
+                return score
+
+            return -1
 
     def hand_score(id: int, ignore_count: bool):
         """Evaluate hand card value for Team Rocket's Honchkrow deck."""
@@ -521,7 +604,11 @@ def agent(obs_dict: dict) -> list[int]:
                 score = 5000
         elif id == Honchkrow:
             # Main attacker - Rocket Feathers is our primary win condition
-            if len(my_state.active) > 0 and my_state.active[0].id != Honchkrow:
+            if (
+                len(my_state.active) > 0
+                and my_state.active[0] is not None
+                and my_state.active[0].id != Honchkrow
+            ):
                 score = 70000  # Very high priority to get into active
             elif field_counts[Honchkrow] == 0:
                 score = 65000  # Priority to set up bench Honchkrow
@@ -562,11 +649,52 @@ def agent(obs_dict: dict) -> list[int]:
             else:
                 score = 30000  # Still valuable even at hand limit
         elif id == Proton:
-            # Support fuel - lowest discard priority
-            score = 200  # Very low value - should be discarded first to Rocket Feathers
+            rocket_basics_in_deck = (
+                deck_counts[Murkrow] + deck_counts[Porygon] + deck_counts[Articuno]
+            )
+            bench_space = 5 - len(my_state.bench)
+            is_first_turn = state.turn <= 1
+            if rocket_basics_in_deck == 0 or bench_space == 0:
+                score = -1  # サーチ先なし or ベンチ満杯なら無意味
+            elif is_first_turn and not state.supporterPlayed:
+                score = 100000  # 先攻1ターン目：最優先（通常使えないターンに使える）
+            elif bench_space >= 4:
+                score = 100000
+            elif bench_space == 3:
+                score = 85000  # ベンチが3枠以上空き：3体フル展開の価値大
+            elif bench_space == 2:
+                score = 50000
+            elif bench_space == 1:
+                score = 20000  # 1枠しか空いていない：恩恵が薄い
+            else:
+                score = 200
         elif id == Archer:
-            # Support fuel - second lowest discard priority
-            score = 400  # Low value - second choice for discard
+            if not pre_ko:
+                score = -1
+            else:
+                # Ignition_Energyが手札にある場合はリセットを抑制
+                # （アクティブにHonchkrowを出せばすぐ使える価値があるため）
+                ignition_in_hand = sum(
+                    1 for c in my_state.hand if c.id == Ignition_Energy
+                )
+                honchkrow_on_bench = any(c.id == Honchkrow for c in my_state.bench)
+                if ignition_in_hand >= 1 and honchkrow_on_bench:
+                    score = -1  # Honchkrow+Ignitionのコンボが成立しうる→リセット禁止
+                else:
+                    current_hand_scores = [
+                        hand_score(c.id, True) for c in my_state.hand if c.id != Archer
+                    ]
+                    avg_score = (
+                        sum(current_hand_scores) / len(current_hand_scores)
+                        if current_hand_scores
+                        else 0
+                    )
+                    if avg_score < 5000:
+                        score = 70000
+                    elif avg_score < 15000:
+                        score = 40000
+                    else:
+                        score = 10000
         elif id == Giovanni:
             # Support fuel - third lowest discard priority
             score = 600  # Lower-mid value - third choice for discard
@@ -589,7 +717,11 @@ def agent(obs_dict: dict) -> list[int]:
                 score = 2000
         elif id == Brave_Bangle:
             # Extra damage to opponent EX - helps Rocket Feathers or Polygon
-            if len(op_state.active) > 0 and card_table[op_state.active[0].id].ex:
+            if (
+                len(op_state.active) > 0
+                and op_state.active[0] is not None
+                and card_table[op_state.active[0].id].ex
+            ):
                 score = 15000  # Boost if opponent has EX
             else:
                 score = 3000
@@ -638,23 +770,139 @@ def agent(obs_dict: dict) -> list[int]:
                     max_score = max(max_score, attach_score(id, pokemon, False))
             score = max_score if max_score > 0 else 2000
         elif id == Ignition_Energy:
-            # Temporary energy - only use if can attack THIS turn and KO
-            if can_main_attack and len(op_state.active) > 0:
-                if my_state.active and my_state.active[0].id == Honchkrow:
-                    if opponent_active_hp <= rocket_feathers_required_support * 60:
-                        score = 25000  # Good for finishing blow
-                    else:
-                        score = -1  # Don't waste on missed KO
+            if (
+                my_state.active
+                and my_state.active[0] is not None
+                and my_state.active[0].id == Honchkrow
+            ):
+                rocket_energy_count = sum(
+                    1 for e in my_state.active[0].energyCards if e.id == Rocket_Energy
+                )
+                if rocket_energy_count >= 2:
+                    score = -1  # 不要
                 else:
-                    score = -1
+                    score = 35000  # 付ければ技が打てる → 積極的に使う
             else:
-                score = -1  # Never use for setup
-
+                score = -1
         # Penalty for duplicates in hand
         if not ignore_count and hand_counts[id] > 0:
             score -= 100000  # Strong penalty for having multiples already
 
         return score
+    
+    def has_hand_energy():
+        return any(
+            c.id in {Rocket_Energy, Ignition_Energy}
+            for c in my_state.hand
+        )
+
+    def can_evolve_from_hand():
+        """
+        手札からすぐ進化できるポケモンが盤面に存在するか
+        """
+        for c in my_state.hand:
+            if c.id == Honchkrow:
+                for p in my_state.active + my_state.bench:
+                    if (
+                        p is not None
+                        and p.id == Murkrow
+                        and not p.appearThisTurn
+                    ):
+                        return True
+
+            elif c.id == Porygon2:
+                for p in my_state.active + my_state.bench:
+                    if (
+                        p is not None
+                        and p.id == Porygon
+                        and not p.appearThisTurn
+                    ):
+                        return True
+
+            elif c.id == Porygon_Z:
+                for p in my_state.active + my_state.bench:
+                    if (
+                        p is not None
+                        and p.id == Porygon2
+                        and not p.appearThisTurn
+                    ):
+                        return True
+
+        return False
+    
+    def has_ready_evolution_attacker():
+        """
+        エネルギーを付ければすぐ攻勢に転じられる進化ポケモンが存在するか
+        """
+        hand_energy = has_hand_energy()
+
+        for p in my_state.active + my_state.bench:
+            if p is None:
+                continue
+
+            #
+            # Honchkrow
+            #
+            if p.id == Honchkrow:
+                supporters = sum(
+                    1
+                    for c in my_state.hand
+                    if c.id in TEAM_ROCKET_SUPPORTERS
+                )
+
+                if hand_energy and supporters >= 2:
+                    return True
+
+            #
+            # Porygon2
+            #
+            elif p.id == Porygon2:
+                if (
+                    hand_energy
+                    and rocket_support_discard_count >= 8
+                ):
+                    return True
+
+            #
+            # PorygonZ
+            #
+            elif p.id == Porygon_Z:
+                if (
+                    hand_energy
+                    and rocket_support_discard_count >= 8
+                ):
+                    return True
+
+        return False
+    
+    should_wall_with_articuno = False
+
+    has_evolution = any(
+        p.id in {Honchkrow, Porygon2, Porygon_Z}
+        for p in my_state.active + my_state.bench
+        if p is not None
+    )
+
+    hand_energy = has_hand_energy()
+
+    #
+    # ケース1
+    # 進化ポケモンなし
+    #
+    if not has_evolution:
+        if (
+            not can_evolve_from_hand()
+            or not hand_energy
+        ):
+            should_wall_with_articuno = True
+
+    #
+    # ケース2
+    # 進化ポケモンあり
+    #
+    else:
+        if not has_ready_evolution_attacker():
+            should_wall_with_articuno = True
 
     global use_support
     if context == SelectContext.MAIN:
@@ -685,7 +933,6 @@ def agent(obs_dict: dict) -> list[int]:
             and card.id != Boss_Orders
         ):
             support_count += 1
-
     no_draw = (
         my_state.deckCount <= 8
     )  # Whether to restrict actions that reduce the deck
@@ -698,6 +945,12 @@ def agent(obs_dict: dict) -> list[int]:
 
     scores = []  # Score for each action
     for o in select.option:
+        print(
+            "OPTION",
+            o.type,
+            "context",
+            context,
+        )
         score = 0  # The default and baseline score is 0.
         if o.type == OptionType.NUMBER:
             score = o.number
@@ -714,28 +967,53 @@ def agent(obs_dict: dict) -> list[int]:
                 if isinstance(card, Pokemon):
                     energy_count = len(card.energies)
                     hp = card.hp
+                print(
+                    "CHECK",
+                    context,
+                    SelectContext.DISCARD,
+                    None if select.effect is None else select.effect.id,
+                    Honchkrow,
+                )
                 if (
                     context == SelectContext.SWITCH
                     or context == SelectContext.TO_ACTIVE
                     or context == SelectContext.SETUP_ACTIVE_POKEMON
                 ):
-                    # Selection of the Pokémon to send to the Active Spot
                     if o.playerIndex == my_index:
-                        if card.id == Dreepy:
+                        if card.id == Dreepy:  # Murkrow
                             score += 10000
-                        elif card.id == Drakloak:
-                            if energy_count >= 1:
-                                score += 20000
+                        elif card.id == Articuno:
+                            if should_wall_with_articuno:
+                                score += 150000
                             else:
-                                score -= 10000
-                        elif card.id == Dragapult_ex:
+                                score -= 5000
+                        elif card.id == Drakloak:  # Honchkrow
+                            # 手札にIgnition_Energyがあればアクティブに出した瞬間に技が打てる
+                            ignition_in_hand = sum(
+                                1 for c in my_state.hand \
+                                    if c.id == Ignition_Energy
+                            )
+                            if ignition_in_hand > 0:
+                                score += 150000  # Ignitionがあれば最優先
+                            elif energy_count >= 1:
+                                score += 80000  # エネルギー付き
+                            else:
+                                score += 50000  # エネルギーなしでも元々の優先度を維持
+                        elif card.id == Porygon:
                             score += 50000
-                        elif card.id == Budew:
+                        elif card.id == Articuno:
                             if context != SelectContext.SWITCH:
-                                score += 100000
-                            elif not bench_attacker:
-                                score += 30000
-                        elif card.id == Fezandipiti_ex:
+                                if should_wall_with_articuno:
+                                    score += 120000
+                                else:
+                                    score -= 10000
+
+                            else:
+                                if should_wall_with_articuno:
+                                    score += 80000
+                                else:
+                                    score -= 10000
+                        elif card.id == Porygon2:
                             score -= 1000
                         elif card.id == Meowth_ex:
                             score -= 2000
@@ -757,10 +1035,32 @@ def agent(obs_dict: dict) -> list[int]:
                         # Reverse scoring
                         score = 100000 - hand_score(card.id, True)
                 elif context == SelectContext.DISCARD:
-                    hand_counts[card.id] -= 1
-                    if card_table[card.id].cardType == CardType.SUPPORTER:
-                        support_count -= 1
-                    score = -hand_score(card.id, False)
+                    print("DISCARD OPTION TYPE =", o.type)
+                    print(
+                        "DISCARD effect=",
+                        None if select.effect is None else select.effect.id,
+                        "Honchkrow=",
+                        Honchkrow,
+                    )
+                    print("DISCARD")
+                    print("context =", select.context)
+                    print("effect =", select.effect)
+                    print("contextCard =", select.contextCard)
+                    print("min =", select.minCount)
+                    print("max =", select.maxCount)
+                    if select.effect is not None and select.effect.id == Honchkrow:
+                        print("remaining =", rocket_feathers_remaining)
+                        if rocket_feathers_remaining <= 0:
+                            score = -1000000
+                        elif card.id in TEAM_ROCKET_SUPPORTERS:
+                            score = 100000
+                        else:
+                            score = -100000
+                    else:
+                        hand_counts[card.id] -= 1
+                        if card_table[card.id].cardType == CardType.SUPPORTER:
+                            support_count -= 1
+                        score = -hand_score(card.id, False)
                 elif (
                     context == SelectContext.DAMAGE_COUNTER
                     or context == SelectContext.DAMAGE_COUNTER_ANY
@@ -796,7 +1096,7 @@ def agent(obs_dict: dict) -> list[int]:
                     score = attach_score(
                         context_card_id, card, o.area == AreaType.ACTIVE
                     )
-                    if card.id == Dragapult_ex:
+                    if card.id == Porygon:
                         score += 200
         elif o.type == OptionType.ENERGY_CARD or o.type == OptionType.ENERGY:
             # Discarding energy (Retreat or Crushing Hammer)
@@ -846,7 +1146,6 @@ def agent(obs_dict: dict) -> list[int]:
                     score = 12000  # Bench wall setup
                 else:
                     score = 100
-
             # Supporter cards - Team Rocket supporters
             elif card.id == Ariana:
                 # Draw support - preserve as much as possible
@@ -855,17 +1154,50 @@ def agent(obs_dict: dict) -> list[int]:
                 else:
                     score = -1
             elif card.id == Proton:
-                # Support fuel - conditional
-                if card_score > 0 and not state.supporterPlayed:
-                    score = 5000  # Lower priority for discard
+                rocket_basics_in_deck = (
+                    deck_counts[Murkrow] + deck_counts[Porygon] + deck_counts[Articuno]
+                )
+                bench_space = 5 - len(my_state.bench)
+                is_first_turn = state.turn <= 1
+                if rocket_basics_in_deck == 0 or bench_space == 0:
+                    score = -1
+                elif not state.supporterPlayed:
+                    if is_first_turn:
+                        score = 90000
+                    elif bench_space >= 3:
+                        score = 75000
+                    elif bench_space == 2:
+                        score = 50000
+                    elif bench_space == 1:
+                        score = 20000
+                    else:
+                        score = -1
                 else:
                     score = -1
             elif card.id == Archer:
-                # Support fuel - conditional
-                if card_score > 0 and not state.supporterPlayed:
-                    score = 7000
-                else:
+                ignition_in_hand = sum(
+                    1 for c in my_state.hand if c.id == Ignition_Energy
+                )
+                honchkrow_on_bench = any(c.id == Honchkrow for c in my_state.bench)
+                if not pre_ko or state.supporterPlayed:
                     score = -1
+                elif ignition_in_hand >= 1 and honchkrow_on_bench:
+                    score = -1  # コンボ保持を優先
+                else:
+                    current_hand_scores = [
+                        hand_score(c.id, True) for c in my_state.hand if c.id != Archer
+                    ]
+                    avg_score = (
+                        sum(current_hand_scores) / len(current_hand_scores)
+                        if current_hand_scores
+                        else 0
+                    )
+                    if avg_score < 5000:
+                        score = 70000
+                    elif avg_score < 15000:
+                        score = 40000
+                    else:
+                        score = 10000
             elif card.id == Giovanni:
                 # Support fuel - conditional
                 if card_score > 0 and not state.supporterPlayed:
@@ -913,7 +1245,11 @@ def agent(obs_dict: dict) -> list[int]:
             elif card.id == Air_Balloon:
                 score = 15000  # Tool - useful for wall or switching
             elif card.id == Brave_Bangle:
-                if len(op_state.active) > 0 and card_table[op_state.active[0].id].ex:
+                if (
+                    len(op_state.active) > 0
+                    and op_state.active[0] is not None
+                    and card_table[op_state.active[0].id].ex
+                ):
                     score = 18000
                 else:
                     score = 5000
@@ -926,6 +1262,7 @@ def agent(obs_dict: dict) -> list[int]:
             card = get_card(obs, o.area, o.index, my_index)
             pokemon = get_card(obs, o.inPlayArea, o.inPlayIndex, my_index)
             score = attach_score(card.id, pokemon, o.inPlayArea == AreaType.ACTIVE)
+            print("ATTACH", card.id, "->", pokemon.id, "score=", score)
         elif o.type == OptionType.EVOLVE:
             pokemon = get_card(obs, o.inPlayArea, o.inPlayIndex, my_index)
 
@@ -960,16 +1297,77 @@ def agent(obs_dict: dict) -> list[int]:
             else:
                 score = -1
         elif o.type == OptionType.ATTACK:
-            score = o.attackId
+            print("ATTACK OPTION", o.attackId, "ROCKET", ROCKET_FEATHERS_ATTACK_ID)
+            if o.attackId == ROCKET_FEATHERS_ATTACK_ID:
+                supporters_in_hand = sum(
+                    1 for c in my_state.hand if c.id in TEAM_ROCKET_SUPPORTERS
+                )
+                damage = rocket_feathers_discard_budget * 60
+                score = damage
+                if rocket_feathers_can_ko:
+                    score += 100000
+            elif o.attackId == HAMMER_IN_ATTACK_ID:
+                score = 100  # 固定100ダメージ
+            else:
+                score = 50
 
         scores.append(score)
+    print("effect =", select.effect)
+    if (
+        context == SelectContext.DISCARD
+        and select.effect is not None
+        and select.effect.id == Honchkrow
+    ):
+        supporters = []
 
+        for idx, o in enumerate(select.option):
+            card = get_card(
+                obs,
+                o.area,
+                o.index,
+                o.playerIndex,
+            )
+
+            if card.id in TEAM_ROCKET_SUPPORTERS:
+                priority = ROCKET_SUPPORT_DISCARD_PRIORITY.get(card.id, 99)
+                supporters.append((priority, idx))
+
+        supporters.sort()
+
+        if rocket_feathers_can_ko:
+            output = [idx for _, idx in supporters[:rocket_feathers_required_support]]
+        else:
+            output = []
+
+            keep_used = False
+
+            for _, idx in supporters:
+                card = get_card(
+                    obs,
+                    select.option[idx].area,
+                    select.option[idx].index,
+                    select.option[idx].playerIndex,
+                )
+
+                if not keep_used and card.id == rocket_feathers_keep_support_id:
+                    keep_used = True
+                    continue
+
+                output.append(idx)
+
+        print("Rocket Feathers select", len(output), "cards")
+
+        return output
+
+    # ここから通常処理
     output = []
+
     if len(scores) >= 1:
-        # Select in descending order of score
         sorted_scores = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
-        for i in range(select.maxCount):
-            # If the score is negative, do not select it if skipping is possible
+
+        limit = min(select.maxCount, len(sorted_scores))
+
+        for i in range(limit):
             if (
                 sorted_scores[i][1] >= 0
                 or select.minCount > i
