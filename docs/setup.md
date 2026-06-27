@@ -1,46 +1,33 @@
 # 開発環境セットアップマニュアル (docs/setup.md)
 
 本ドキュメントでは、ポケモンカードゲーム AI エージェント開発のための共通開発環境の構築方法について解説します。
-本プロジェクトでは、OS間の環境差異（特にC++共有ライブラリ `libcg.so` の動作環境）を排除するため、**Docker** および **VS Code Dev Containers** を用いた共通開発環境を使用します。
+本プロジェクトでは、OS間の環境差異（特にC++共有ライブラリ `libcg.so` の動作環境）を排除するため、**VS Code Dev Containers** を用いた共通開発環境を使用し、すべての作業をコンテナ内で行います。
 
 ---
 
 ## 1. 開発環境の前提要件
 
 - **Python バージョン**: 3.10 (Kaggle公式および cabt エンジンの推奨環境に準拠)
-- **ホストOS**: Linux, Windows, macOS
 - **必須ソフトウェア**:
-  - Docker Desktop (または Colima, Rancher Desktop 等 of Docker 互換環境)
-  - VS Code (推奨) + 拡張機能「**Dev Containers**」
+  - Docker Desktop (または Colima, Rancher Desktop 等の Docker 互換環境)
+  - VS Code + 拡張機能「**Dev Containers**」
 
 ---
 
 ## 2. 環境構築手順
 
-### 方法 A: VS Code Dev Containers を使用する (推奨)
-
 VS Code の拡張機能を使用すると、エディタ設定や必要なツール（Black などのフォーマッタ、Flake8 リンター、Python/Jupyter 用拡張機能）がコンテナ起動時に自動でセットアップされます。
 
 1. VS Code に拡張機能「**Dev Containers**」をインストールします。
 2. 本プロジェクトフォルダを VS Code で開きます。
-3. 画面右下に表示される「**Reopen in Container (コンテナで開く)**」というポップアップをクリックします。
-   - もし表示されない場合は、左下の緑色のマーク（`><`）をクリックし、「**Reopen in Container**」を選択します。
+3. 画面左下の緑色のマーク（`><`）をクリックし、「**新しい開発コンテナ**」or 「**コンテナで再度開く**」を選択します。
 4. 自動的に Docker イメージがビルドされ、コンテナ内で開発準備が完了します。
-
-### 方法 B: 手動で Docker イメージをビルドする
-
-VS Code を使わない場合や、コマンドラインから直接コンテナを実行する場合は、手動でイメージをビルドします。
-
-```bash
-# プロジェクトのルートディレクトリで実行
-docker build -t ptcg-dev -f .devcontainer/Dockerfile .
-```
 
 ---
 
 ## 3. Kaggle API と公式サンプルの取得手順
 
-Kaggle で公開されている公式サンプルエージェント（Lucario, Abomasnow, Dragapult, Iono）を一括で自動ダウンロードし、`sample_deck/` 配下に配置するスクリプトが用意されています。
+Kaggle で公開されている公式サンプルエージェント（Lucario, Abomasnow, Dragapult, Iono）を一括で自動ダウンロードし、`sample_deck/` 配下に配置するための手順です。
 
 ### 3.1 事前準備: Kaggle API トークンの設定
 本ツールの利用には Kaggle API トークンが必要です。
@@ -48,29 +35,49 @@ Kaggle で公開されている公式サンプルエージェント（Lucario, A
 2. ホストマシンのユーザーホームディレクトリ配下に `access_token` というファイル名でトークンを直接書き込んで保存します：
    - Windows: `C:\Users\<ユーザー名>\.kaggle\access_token`
    - macOS/Linux: `~/.kaggle/access_token`
+3. ホスト側に用意した `access_token` は、コンテナ起動時に自動的にコンテナ内の `/root/.kaggle/access_token` にマウント（共有）されます。
 
 ### 3.2 サンプル取得の実行方法
-インストール時の権限エラーを防ぐため、コンテナを **root 権限** で起動してスクリプトを実行します。
+Dev Container 内のターミナルで、以下のスクリプトを実行します。
 
 ```bash
-# ホスト側の ~/.kaggle をコンテナの /root/.kaggle にマウントして実行
-docker run --rm -v $(pwd):/workspace -w /workspace -v ~/.kaggle:/root/.kaggle:ro ptcg-dev python3 tests/fetch_samples.py
+fetch_samples.sh
 ```
 
 実行が完了すると、ダウンロードされたエージェントは自動で `sample_deck/` 配下に展開され、同時に最新の `cg` フォルダが自動で同期されます。
 
 ---
 
-## 4. トラブルシューティング（パーミッションエラー）
+## 4. コンテナ内からの SSH 接続設定（Git 操作用）
 
-ホスト側のファイル所有権（パーミッション）問題を防止するため、Docker 起動コマンドには原則として `--user $(id -u):$(id -g)` を付与して実行してください。
+VS Code Dev Containers 内から GitHub 等へ SSH 経由で `git push` や `git pull` を行うためには、**ホスト側の SSH 鍵をコンテナ内に共有（SSH Agent Forwarding）** する必要があります。コンテナ内には `openssh-client` がインストールされているため、ホスト側で以下の設定を行ってからコンテナを起動してください。
 
-もし以前に `docker run` を `--user` 指定なし（または root 権限）で実行したことにより、`scratch/` などのディレクトリやファイルが書き込み禁止（所有者が `root`）になってしまった場合は、ホスト側のターミナルで以下を実行して所有権を戻すか再作成してください。
+### 4.1 ホスト側での設定手順
 
+#### Windows の場合
+1. スタートメニューで「サービス」を検索して起動します。
+2. **OpenSSH Authentication Agent** サービスを探し、右クリックして「プロパティ」を開きます。
+3. スタートアップの種類を「自動」に変更し、サービスの状態を「開始」にします。
+4. PowerShell（管理者権限不要）を開き、秘密鍵を登録します：
+   ```powershell
+   ssh-add $HOME\.ssh\id_rsa  # ご自身の鍵のパスを指定してください
+   ```
+
+#### macOS / Linux の場合
+1. ターミナルを開き、`ssh-agent` がバックグラウンドで起動していることを確認します：
+   ```bash
+   eval "$(ssh-agent -s)"
+   ```
+2. 秘密鍵をエージェントに登録します：
+   ```bash
+   ssh-add ~/.ssh/id_rsa  # ご自身の鍵のパスを指定してください
+   ```
+
+### 4.2 コンテナ起動後の確認
+上記の設定をした状態で VS Code でコンテナを起動（または Reopen）すると、コンテナ内で自動的にホストの SSH 鍵が転送されます。コンテナ内のターミナルで以下を実行して、鍵が正しく共有されているか確認できます：
 ```bash
-# 所有権の復元（Linux/macOS）
-sudo chown -R $(id -u):$(id -g) scratch/
-
-# またはディレクトリの再作成
-rm -rf scratch && mkdir scratch
+ssh-add -l
 ```
+
+### 4.3 回避策（接続できない場合）
+ネットワークやセキュリティポリシーにより、コンテナ内から SSH 接続ができない、または `ssh-add` でエラーが発生する場合は、**Git のプッシュ・プル操作のみホスト側のターミナルから実行** してください。コンテナ内ではコードの編集や各種テストスクリプトの実行のみを行い、コミット・プッシュ等のリポジトリ操作はホスト側で行うことで、環境に依存せず安全に作業を進めることができます。

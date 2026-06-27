@@ -57,7 +57,9 @@ Basic_Fire_Energy = 2
 Basic_Psychic_Energy = 5
 
 
-def get_card(obs: Observation, area: AreaType, index: int, player_index: int) -> Pokemon | Card | None:
+def get_card(
+    obs: Observation, area: AreaType, index: int, player_index: int
+) -> Pokemon | Card | None:
     ps = obs.current.players[player_index]
     match area:
         case AreaType.DECK:
@@ -198,14 +200,20 @@ def setup_score(card: Pokemon | Card) -> int:
     return 1000
 
 
-def supporter_score(card_id: int, my_state, op_state, field_counts, remaining_counts) -> int:
+def supporter_score(
+    card_id: int, my_state, op_state, field_counts, remaining_counts
+) -> int:
     op_prizes_left = len(op_state.prize)
     main_ready = field_counts[Dragapult_ex] >= 1 and any(
-        is_ready_dragapult(card) for card in list(my_state.active) + list(my_state.bench)
+        is_ready_dragapult(card)
+        for card in list(my_state.active) + list(my_state.bench)
     )
 
     if card_id == Crispin:
-        if remaining_counts[Basic_Fire_Energy] > 0 and remaining_counts[Basic_Psychic_Energy] > 0:
+        if (
+            remaining_counts[Basic_Fire_Energy] > 0
+            and remaining_counts[Basic_Psychic_Energy] > 0
+        ):
             return 26000 if not main_ready else 18000
         return 8000
     if card_id == Lillie_Determination:
@@ -225,7 +233,15 @@ def supporter_score(card_id: int, my_state, op_state, field_counts, remaining_co
     return -1
 
 
-def hand_score(card_id: int, my_state, op_state, field_counts, hand_counts, discard_counts, remaining_counts) -> int:
+def hand_score(
+    card_id: int,
+    my_state,
+    op_state,
+    field_counts,
+    hand_counts,
+    discard_counts,
+    remaining_counts,
+) -> int:
     op_prizes_left = len(op_state.prize)
 
     if card_id == Dreepy:
@@ -265,17 +281,35 @@ def hand_score(card_id: int, my_state, op_state, field_counts, hand_counts, disc
     if card_id == Buddy_Buddy_Poffin:
         return 42000 if remaining_counts[Dreepy] + remaining_counts[Duskull] > 0 else -1
     if card_id == Night_Stretcher:
-        if discard_counts[Dreepy] > 0 or discard_counts[Duskull] > 0 or discard_counts[Basic_Fire_Energy] > 0 or discard_counts[Basic_Psychic_Energy] > 0:
+        if (
+            discard_counts[Dreepy] > 0
+            or discard_counts[Duskull] > 0
+            or discard_counts[Basic_Fire_Energy] > 0
+            or discard_counts[Basic_Psychic_Energy] > 0
+        ):
             return 36000
         return -1
     if card_id == Crushing_Hammer:
         return 15000 if op_prizes_left <= 4 else 7000
     if card_id == Ultra_Ball:
-        if remaining_counts[Dreepy] + remaining_counts[Duskull] + remaining_counts[Dragapult_ex] + remaining_counts[Dusknoir] + remaining_counts[Dusclops] > 0:
+        if (
+            remaining_counts[Dreepy]
+            + remaining_counts[Duskull]
+            + remaining_counts[Dragapult_ex]
+            + remaining_counts[Dusknoir]
+            + remaining_counts[Dusclops]
+            > 0
+        ):
             return 40000
         return 1000
     if card_id == Poke_Pad:
-        if remaining_counts[Dreepy] + remaining_counts[Duskull] + remaining_counts[Drakloak] + remaining_counts[Dusclops] > 0:
+        if (
+            remaining_counts[Dreepy]
+            + remaining_counts[Duskull]
+            + remaining_counts[Drakloak]
+            + remaining_counts[Dusclops]
+            > 0
+        ):
             return 24000
         return -1
     if card_id in (Basic_Fire_Energy, Basic_Psychic_Energy):
@@ -287,7 +321,9 @@ def hand_score(card_id: int, my_state, op_state, field_counts, hand_counts, disc
     return 2000
 
 
-def attach_score(attach_id: int, pokemon: Pokemon, active: bool, op_prizes_left: int) -> int:
+def attach_score(
+    attach_id: int, pokemon: Pokemon, active: bool, op_prizes_left: int
+) -> int:
     energy_count = len(pokemon.energies)
     score = 1000
 
@@ -322,7 +358,11 @@ def attach_score(attach_id: int, pokemon: Pokemon, active: bool, op_prizes_left:
         if active:
             score -= 1500
 
-    if attach_id == Basic_Psychic_Energy and pokemon.id in (Dragapult_ex, Dusclops, Dusknoir):
+    if attach_id == Basic_Psychic_Energy and pokemon.id in (
+        Dragapult_ex,
+        Dusclops,
+        Dusknoir,
+    ):
         score += 2000
     if attach_id == Basic_Fire_Energy and pokemon.id == Dragapult_ex:
         score += 2000
@@ -343,9 +383,11 @@ def main_attack_score(attack_id: int, op_active_hp: int, op_prizes_left: int) ->
 
 
 def choose_indices(scores: list[int], select) -> list[int]:
-    order = [i for i, _ in sorted(enumerate(scores), key=lambda item: item[1], reverse=True)]
+    order = [
+        i for i, _ in sorted(enumerate(scores), key=lambda item: item[1], reverse=True)
+    ]
     output: list[int] = []
-    for i, index in enumerate(order[:select.maxCount]):
+    for i, index in enumerate(order[: select.maxCount]):
         if scores[index] >= 0 or i < select.minCount:
             output.append(index)
     return output
@@ -365,9 +407,9 @@ def agent(obs_dict: dict) -> list[int]:
 
     remaining_counts = build_remaining_counts(obs, my_index)
 
-    field_counts = defaultdict(int)
-    hand_counts = defaultdict(int)
-    discard_counts = defaultdict(int)
+    field_counts: defaultdict[int, int] = defaultdict(int)
+    hand_counts: defaultdict[int, int] = defaultdict(int)
+    discard_counts: defaultdict[int, int] = defaultdict(int)
 
     ready_active_dragapult = -1
     ready_bench_dragapult = -1
@@ -427,7 +469,11 @@ def agent(obs_dict: dict) -> list[int]:
         elif o.type == OptionType.CARD:
             card = get_card(obs, o.area, o.index, o.playerIndex)
             if card is not None:
-                if context in (SelectContext.SWITCH, SelectContext.TO_ACTIVE, SelectContext.SETUP_ACTIVE_POKEMON):
+                if context in (
+                    SelectContext.SWITCH,
+                    SelectContext.TO_ACTIVE,
+                    SelectContext.SETUP_ACTIVE_POKEMON,
+                ):
                     score = setup_score(card)
                     if o.index == switch_index:
                         score += 18000
@@ -435,7 +481,11 @@ def agent(obs_dict: dict) -> list[int]:
                         score += 2000
                     elif card.id in (Dusclops, Dusknoir):
                         score += 1000
-                elif context in (SelectContext.SETUP_BENCH_POKEMON, SelectContext.TO_BENCH, SelectContext.TO_HAND):
+                elif context in (
+                    SelectContext.SETUP_BENCH_POKEMON,
+                    SelectContext.TO_BENCH,
+                    SelectContext.TO_HAND,
+                ):
                     score = setup_score(card)
                 elif context == SelectContext.DISCARD:
                     if card.id in (Basic_Fire_Energy, Basic_Psychic_Energy):
@@ -449,8 +499,16 @@ def agent(obs_dict: dict) -> list[int]:
                     if hand_counts[card.id] >= 2:
                         score += 5000
                     hand_counts[card.id] -= 1
-                elif context in (SelectContext.DAMAGE_COUNTER, SelectContext.DAMAGE_COUNTER_ANY):
-                    damage = 130 if select.contextCard is not None and select.contextCard.id == Dusknoir else 50
+                elif context in (
+                    SelectContext.DAMAGE_COUNTER,
+                    SelectContext.DAMAGE_COUNTER_ANY,
+                ):
+                    damage = (
+                        130
+                        if select.contextCard is not None
+                        and select.contextCard.id == Dusknoir
+                        else 50
+                    )
                     score = pokemon_target_score(card, op_prizes_left, damage)
                     if card.id in (Dusknoir, Dusclops):
                         if should_use_cursed_blast(card.id, op_prizes_left):
@@ -458,8 +516,12 @@ def agent(obs_dict: dict) -> list[int]:
                         else:
                             score = -1
                 elif context == SelectContext.ATTACH_FROM:
-                    context_card_id = select.contextCard.id if select.contextCard is not None else 0
-                    score = attach_score(context_card_id, card, o.area == AreaType.ACTIVE, op_prizes_left)
+                    context_card_id = (
+                        select.contextCard.id if select.contextCard is not None else 0
+                    )
+                    score = attach_score(
+                        context_card_id, card, o.area == AreaType.ACTIVE, op_prizes_left
+                    )
         elif o.type in (OptionType.ENERGY_CARD, OptionType.ENERGY):
             if o.playerIndex != my_index:
                 score = 10
@@ -467,25 +529,53 @@ def agent(obs_dict: dict) -> list[int]:
             card = get_card(obs, AreaType.HAND, o.index, my_index)
             if card is not None:
                 if card_table[card.id].cardType == CardType.SUPPORTER:
-                    score = supporter_score(card.id, my_state, op_state, field_counts, remaining_counts)
+                    score = supporter_score(
+                        card.id, my_state, op_state, field_counts, remaining_counts
+                    )
                 elif card.id in (Dreepy, Duskull, Fezandipiti_ex, Meowth_ex, Budew):
                     score = setup_score(card)
-                elif card.id in (Dragapult_ex, Dusclops, Dusknoir, Rare_Candy, Buddy_Buddy_Poffin, Ultra_Ball, Night_Stretcher, Crushing_Hammer, Poke_Pad, Unfair_Stamp, Jamming_Tower, Team_Rocket_Watchtower):
-                    score = hand_score(card.id, my_state, op_state, field_counts, hand_counts, discard_counts, remaining_counts)
+                elif card.id in (
+                    Dragapult_ex,
+                    Dusclops,
+                    Dusknoir,
+                    Rare_Candy,
+                    Buddy_Buddy_Poffin,
+                    Ultra_Ball,
+                    Night_Stretcher,
+                    Crushing_Hammer,
+                    Poke_Pad,
+                    Unfair_Stamp,
+                    Jamming_Tower,
+                    Team_Rocket_Watchtower,
+                ):
+                    score = hand_score(
+                        card.id,
+                        my_state,
+                        op_state,
+                        field_counts,
+                        hand_counts,
+                        discard_counts,
+                        remaining_counts,
+                    )
                 else:
                     score = 1000
         elif o.type == OptionType.ATTACH:
             card = get_card(obs, o.area, o.index, my_index)
             pokemon = get_card(obs, o.inPlayArea, o.inPlayIndex, my_index)
             if card is not None and pokemon is not None:
-                score = attach_score(card.id, pokemon, o.inPlayArea == AreaType.ACTIVE, op_prizes_left)
+                score = attach_score(
+                    card.id, pokemon, o.inPlayArea == AreaType.ACTIVE, op_prizes_left
+                )
         elif o.type == OptionType.EVOLVE:
             pokemon = get_card(obs, o.inPlayArea, o.inPlayIndex, my_index)
             if pokemon is not None:
                 score = len(pokemon.energies) * 1000
                 if pokemon.id == Dreepy:
                     score += 40000
-                    if hand_counts[Dragapult_ex] >= 1 or remaining_counts[Dragapult_ex] > 0:
+                    if (
+                        hand_counts[Dragapult_ex] >= 1
+                        or remaining_counts[Dragapult_ex] > 0
+                    ):
                         score += 9000
                 elif pokemon.id == Duskull:
                     score += 38000
@@ -505,7 +595,9 @@ def agent(obs_dict: dict) -> list[int]:
             card = get_card(obs, o.area, o.index, my_index)
             if card is not None:
                 if card.id in (Dusclops, Dusknoir):
-                    score = 9000 if should_use_cursed_blast(card.id, op_prizes_left) else -1
+                    score = (
+                        9000 if should_use_cursed_blast(card.id, op_prizes_left) else -1
+                    )
                     if card.id == Dusknoir and op_prizes_left <= 2:
                         score += 3000
                 else:
@@ -522,9 +614,11 @@ def agent(obs_dict: dict) -> list[int]:
 
         scores.append(score)
 
-    order = [i for i, _ in sorted(enumerate(scores), key=lambda item: item[1], reverse=True)]
+    order = [
+        i for i, _ in sorted(enumerate(scores), key=lambda item: item[1], reverse=True)
+    ]
     output: list[int] = []
-    for i, index in enumerate(order[:select.maxCount]):
+    for i, index in enumerate(order[: select.maxCount]):
         if scores[index] >= 0 or i < select.minCount:
             output.append(index)
     return output

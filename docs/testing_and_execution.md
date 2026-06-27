@@ -2,7 +2,16 @@
 
 本ドキュメントでは、エージェントの検証、対戦勝率の測定、および対戦過程のGUI可視化を実行するための各種テストスクリプトの使用方法について解説します。
 
-ホスト側のファイル所有権（パーミッション）問題を防止するため、Docker 起動コマンドには必ず `--user $(id -u):$(id -g)` を付与して実行してください。
+本プロジェクトでは、すべての検証・テストコマンドを **VS Code Dev Container (コンテナ内) で実行**します。コンテナ環境内では、自動的に各種スクリプトへの実行パス（`PATH`）が通っているため、`bash` や `scripts/` のプリフィックスを付けず、直接コマンド名を入力するだけで実行できます。
+
+---
+
+## 0. 実行の前提 (PATH 設定の確認)
+
+コンテナ内のターミナルであれば、どのディレクトリにいても直接スクリプトを実行できます。
+
+*   **コマンド例**: `dry_run.sh my_agent`
+*   *※注意*: `devcontainer.json` の変更を反映させるには、コンテナを一度再起動（または「**Rebuild Container (コンテナの再構築)**」）するか、ターミナルで `source ~/.bashrc` を実行して環境変数を更新してください。
 
 ---
 
@@ -10,18 +19,20 @@
 
 エージェントがシミュレータ上でエラーを起こさず、ルールに則って1ゲーム最後まで正常に対戦完了できるかをテストします。
 
-### 1.1 検出された全エージェントの一括テスト (CIと同等)
-引数なしで実行すると、`sample_submission/`、`agents_draft/` 配下に存在するすべての有効なエージェントフォルダを走査して順次テストします。
-※完成済みフォルダである `agents/` は除外されます（`--include-completed` で含めることも可能）。
+※テスト実行前に、自動的に PR 時に動作するリンター（Black, Flake8, Mypy）と同等の静的チェックが走ります。エラーがある場合はテストは実行されません（`--no-lint` オプションでスキップ可能です）。
+
+### 1.1 全エージェントの一括テスト
+引数なしで実行すると、`sample_submission/`、`agents_draft/` 配下のすべての有効なエージェントを走査して検証します。
 
 ```bash
-docker run --rm --user $(id -u):$(id -g) -v $(pwd):/workspace -w /workspace ptcg-dev python tests/dry_run.py
+dry_run.sh
 ```
 
 ### 1.2 特定のエージェントを指定してテスト
+位置引数にエージェント名を指定します。`agents/my_agent` や `agents_draft/my_agent` などのディレクトリパスのほか、単にフォルダ名 `my_agent` を入力した場合も自動的にパスを補完・解決します。
+
 ```bash
-docker run --rm --user $(id -u):$(id -g) -v $(pwd):/workspace -w /workspace ptcg-dev python tests/dry_run.py \
-  --agent-dir agents_draft/my_agent
+dry_run.sh my_agent
 ```
 
 ---
@@ -29,79 +40,74 @@ docker run --rm --user $(id -u):$(id -g) -v $(pwd):/workspace -w /workspace ptcg
 ## 2. 対戦勝率測定ベンチマークテスト (Benchmark)
 
 2つのエージェントを指定した回数対戦させ、勝率および平均ターン数を測定・集計します。
-C++ ゲームエンジンのメモリリークやゲーム間の状態リークを防止するため、**1試合ごと別プロセスを立ち上げて完全に隔離実行**します。また、マルチプロセスによる並列対戦をサポートしています。
 
-### 2.1 個別対戦 (特定エージェント同士)
+※テスト実行前に、自動的に静的チェックが走ります（`--no-lint` でスキップ可能です）。
+※比較相手（デフォルト: `latest_submission_path.txt` で指定された最強候補エージェント）、対戦数（デフォルト: `50`）、並列プロセス数（デフォルト: `4`）が自動適用されるため、ハイフン付きのオプションを打たずに**位置引数のみで簡潔に実行**できます。
+
+### 2.1 個別対戦 (位置引数による指定)
+
+#### パターン A: 1つのエージェントのみ指定する (デフォルトの最強候補エージェントと 50 試合対戦)
 ```bash
-docker run --rm --user $(id -u):$(id -g) -v $(pwd):/workspace -w /workspace ptcg-dev python tests/benchmark.py \
-  --agent-a agents_draft/my_agent/main.py \
-  --agent-b latest_submission/main.py \
-  --matches 50 \
-  --workers 4
+benchmark.sh my_agent
 ```
-- `--agent-a`: テストしたい新エージェントの `main.py` のパス
-- `--agent-b`: 比較対象のエージェントの `main.py` のパス
-- `--matches`: 総対戦回数 (偶数推奨、通常は 20〜50試合)
-- `--workers`: 並列実行ワーカー数 (デフォルト: `CPUコア数 - 1`、`1` を指定すると並列化せずシングルプロセス同期実行)
+
+#### パターン B: 2つのエージェントを指定して対戦させる
+位置引数に2つ並べて指定します。自動的に1つ目がテスト対象（`agent-a`）、2つ目が比較対象（`agent-b`）にマッピングされます。
+```bash
+benchmark.sh my_agent other_agent
+```
+*※上記の場合、`my_agent` と `other_agent` を 50 試合対戦させます。*
+
+#### パターン C: オプション設定を上書きして実行する場合 (例: 10試合対戦、並列2プロセス)
+```bash
+benchmark.sh my_agent other_agent --matches 10 --workers 2
+```
 
 ### 2.2 ベースライン比較対戦
-指定したベースラインエージェントと、検出されたすべてのエージェント（`sample_submission`, `agents_draft/*`）をそれぞれ対戦させます。
+指定したベースラインと、検出されたすべてのエージェントを対戦させます。
 ```bash
-docker run --rm --user $(id -u):$(id -g) -v $(pwd):/workspace -w /workspace ptcg-dev python tests/benchmark.py \
-  --baseline sample_submission/main.py \
-  --matches 20
+benchmark.sh --baseline sample_submission/main.py --matches 20
 ```
 
 ### 2.3 総当たり戦 (Round Robin)
 検出されたすべてのエージェント間で総当たり戦を実行し、順位表（Tournament Standings）を出力します。
 ```bash
-docker run --rm --user $(id -u):$(id -g) -v $(pwd):/workspace -w /workspace ptcg-dev python tests/benchmark.py \
-  --round-robin \
-  --matches 20
+benchmark.sh --round-robin --matches 20
 ```
 
 ---
 
 ## 3. 対戦のビジュアル可視化 (Visualization)
 
-対戦の様子を Kaggle 上と同一のビジュアル（アニメーション付きGUI）で再現・確認できる HTML ファイルを出力します。エージェントの意思決定のバグやプレイスタイルのデバッグに非常に有用です。
+対戦の様子を Kaggle と同じGUI（アニメーション付き可視化ビューア）で再現できる HTML ファイルを出力します。
 
+※テスト実行前に、自動的に静的チェックが走ります（`--no-lint` でスキップ可能です）。
+※デフォルトの比較相手（`latest_submission_path.txt` で指定されたエージェント）および出力先（`scratch/visualizer.html`）が内包されています。
+
+### 3.1 デフォルトの相手 (最強候補エージェント) との可視化対戦
 ```bash
-docker run --rm --user $(id -u):$(id -g) -v $(pwd):/workspace -w /workspace ptcg-dev python tests/visualize_match.py \
-  --agent-a agents_draft/my_agent/main.py \
-  --agent-b latest_submission/main.py \
-  --output scratch/visualizer.html
+visualize.sh my_agent
 ```
-- `--output`: 出力先HTMLファイルのパス（デフォルト: `scratch/visualizer.html`）
 
-### 3.1 確認方法
-コマンド実行後、生成された `scratch/visualizer.html` を Chrome などの Web ブラウザで開くだけで、対戦ログやカードの配置、ダメージの蓄積（ダメカン）などがGUIアニメーションで可視化されます。
+### 3.2 特定のエージェント同士の可視化対戦
+位置引数に2つのエージェントを並べて指定します。
+```bash
+visualize.sh my_agent other_agent
+```
+*※生成された `scratch/visualizer.html` を Chrome などのブラウザで開くことで、対戦を可視化再生できます。*
 
 ---
 
-## 4. 静的チェックのローカル実行 (CI同等)
+## 4. 静的チェックのローカル実行 (Linter & Type Checker)
 
-GitHub にコミットをプッシュする前に、CI と同様のコードスタイルチェックをローカルで手動実行することができます。
+コミット前に、CI と同様のコードスタイルチェック（Black, Flake8, Mypy）を手動実行することができます。
 
 ```bash
-# 存在する対象ファイルを動的にスキャンし、一意のファイルリストを作る
-docker run --rm --user $(id -u):$(id -g) -v $(pwd):/workspace -w /workspace ptcg-dev bash -c '
-  PATHS="sample_submission/main.py latest_submission tests agents_draft agents"
-  VALID_PATHS=""
-  for p in $PATHS; do
-    if [ -e "$p" ]; then
-      VALID_PATHS="$VALID_PATHS $p"
-    fi
-  done
-  CHECK_FILES=$(find $VALID_PATHS -name "*.py" -not -path "*/cg/*" 2>/dev/null | sort -u | xargs)
-  
-  echo "=== 1. Black Formatter Check ==="
-  black --check $CHECK_FILES
-  
-  echo "=== 2. Flake8 Linter ==="
-  flake8 $CHECK_FILES --count --select=E9,F63,F7,F82 --show-source --statistics
-  
-  echo "=== 3. Mypy Type Checker ==="
-  mypy $CHECK_FILES --ignore-missing-imports --follow-imports=silent --explicit-package-bases
-'
+lint.sh
+```
+
+### 4.1 Black による自動コードフォーマット
+スタイル違反箇所を自動修正・整形したい場合は、`--fix` オプションを付与します。
+```bash
+lint.sh --fix
 ```

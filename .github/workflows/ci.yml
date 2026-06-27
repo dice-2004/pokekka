@@ -34,7 +34,8 @@ jobs:
 
     - name: Run Black formatter check
       run: |
-        PATHS="sample_submission/main.py latest_submission tests agents_draft agents"
+        PATHS="sample_submission/main.py tests agents_draft agents"
+        if [ -f "latest_submission_path.txt" ]; then PATHS="$PATHS $(cat latest_submission_path.txt | tr -d '\r' | xargs)"; fi
         VALID_PATHS=""
         for p in $PATHS; do
           if [ -e "$p" ]; then
@@ -46,7 +47,8 @@ jobs:
 
     - name: Run Flake8 linter
       run: |
-        PATHS="sample_submission/main.py latest_submission tests agents_draft agents"
+        PATHS="sample_submission/main.py tests agents_draft agents"
+        if [ -f "latest_submission_path.txt" ]; then PATHS="$PATHS $(cat latest_submission_path.txt | tr -d '\r' | xargs)"; fi
         VALID_PATHS=""
         for p in $PATHS; do
           if [ -e "$p" ]; then
@@ -59,7 +61,8 @@ jobs:
 
     - name: Run Mypy type checker
       run: |
-        PATHS="sample_submission/main.py latest_submission tests agents_draft agents"
+        PATHS="sample_submission/main.py tests agents_draft agents"
+        if [ -f "latest_submission_path.txt" ]; then PATHS="$PATHS $(cat latest_submission_path.txt | tr -d '\r' | xargs)"; fi
         VALID_PATHS=""
         for p in $PATHS; do
           if [ -e "$p" ]; then

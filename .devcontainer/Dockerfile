@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     git \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # 作業ディレクトリ
@@ -21,5 +22,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     numpy \
     pandas && \
     chmod -R a+w /usr/local/lib/python3.10/site-packages
+
+ENV PATH="/workspaces/pole/scripts:${PATH}"
 
 CMD ["bash"]
