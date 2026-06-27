@@ -5,7 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'agents_draft/**'
-      - 'latest_submission/**'
+      - 'latest_submission_path.txt'
   workflow_dispatch:
     inputs:
       mode:
@@ -22,7 +22,7 @@ on:
         required: false
         default: 'agents_draft/'
       agent_b:
-        description: 'Path to agent B file (e.g. latest_submission/main.py)'
+        description: 'Path to agent B file (e.g. agents/StarEx/main.py). Defaults to path in latest_submission_path.txt'
         required: false
         default: 'latest_submission/main.py'
       matches:
@@ -102,7 +102,17 @@ jobs:
             
           else
             AGENT_A_PATH="pr_branch/${{ github.event.inputs.agent_a }}"
-            AGENT_B_PATH="pr_branch/${{ github.event.inputs.agent_b }}"
+            INPUT_B="${{ github.event.inputs.agent_b }}"
+            if [ "$INPUT_B" = "latest_submission/main.py" ] || [ -z "$INPUT_B" ]; then
+              if [ -f "pr_branch/latest_submission_path.txt" ]; then
+                LATEST_DIR=$(cat pr_branch/latest_submission_path.txt | tr -d '\r' | xargs)
+                AGENT_B_PATH="pr_branch/$LATEST_DIR/main.py"
+              else
+                AGENT_B_PATH="pr_branch/latest_submission/main.py"
+              fi
+            else
+              AGENT_B_PATH="pr_branch/$INPUT_B"
+            fi
             
             python pr_branch/tests/benchmark.py --agent-a "$AGENT_A_PATH" --agent-b "$AGENT_B_PATH" --matches "$MATCHES" > benchmark_result.txt
             cat benchmark_result.txt
@@ -137,18 +147,22 @@ jobs:
           # PR Trigger: Scan git diff for changed agent folders
           cd pr_branch
           
-          # Detect changes in agents_draft/ and latest_submission/
+          # Detect changes in agents_draft/ and latest_submission_path.txt
           CHANGED_DRAFT=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} | grep -E '^agents_draft/[^/]+/' | cut -d'/' -f1-2 | sort -u | head -n 1 || true)
-          CHANGED_LATEST=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} | grep -E '^latest_submission/' | head -n 1 || true)
+          CHANGED_LATEST=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} | grep '^latest_submission_path.txt' || true)
           
           cd ..
           
           if [ -n "$CHANGED_DRAFT" ]; then
-            # agents_draft/ に変更あり: PR版 agents_draft vs main版 latest_submission (または sample_submission)
+            # agents_draft/ に変更あり: PR版 agents_draft vs main版 最強候補
             echo "Detected changed draft agent: $CHANGED_DRAFT"
             AGENT_A_PATH="pr_branch/${CHANGED_DRAFT}/main.py"
             A_LABEL="${CHANGED_DRAFT}/main.py"
-            if [ -f "main_branch/latest_submission/main.py" ]; then
+            if [ -f "main_branch/latest_submission_path.txt" ]; then
+              LATEST_DIR=$(cat main_branch/latest_submission_path.txt | tr -d '\r' | xargs)
+              AGENT_B_PATH="main_branch/$LATEST_DIR/main.py"
+              B_LABEL="Base（現在のmainブランチの最強候補: $LATEST_DIR）"
+            elif [ -f "main_branch/latest_submission/main.py" ]; then
               AGENT_B_PATH="main_branch/latest_submission/main.py"
               B_LABEL="Base（現在のmainブランチのlatest_submission）"
             else
@@ -156,11 +170,16 @@ jobs:
               B_LABEL="Base（現在のmainブランチのsample_submission - フォールバック）"
             fi
           elif [ -n "$CHANGED_LATEST" ]; then
-            # latest_submission/ のみ変更: PR版 latest_submission vs main版 latest_submission (または sample_submission)
-            echo "Detected changes in latest_submission only"
-            AGENT_A_PATH="pr_branch/latest_submission/main.py"
-            A_LABEL="latest_submission/main.py (PR)"
-            if [ -f "main_branch/latest_submission/main.py" ]; then
+            # latest_submission_path.txt のみが変更された場合: PR版最強候補 vs main版最強候補
+            echo "Detected changes in latest_submission_path.txt"
+            LATEST_DIR_PR=$(cat pr_branch/latest_submission_path.txt | tr -d '\r' | xargs)
+            AGENT_A_PATH="pr_branch/$LATEST_DIR_PR/main.py"
+            A_LABEL="PR 最強候補: $LATEST_DIR_PR"
+            if [ -f "main_branch/latest_submission_path.txt" ]; then
+              LATEST_DIR_BASE=$(cat main_branch/latest_submission_path.txt | tr -d '\r' | xargs)
+              AGENT_B_PATH="main_branch/$LATEST_DIR_BASE/main.py"
+              B_LABEL="Base（現在のmainブランチの最強候補: $LATEST_DIR_BASE）"
+            elif [ -f "main_branch/latest_submission/main.py" ]; then
               AGENT_B_PATH="main_branch/latest_submission/main.py"
               B_LABEL="Base（現在のmainブランチのlatest_submission）"
             else
@@ -170,7 +189,7 @@ jobs:
           else
             echo "No relevant agent changes detected, skipping benchmark."
             echo "### ⏭️ ベンチマークスキップ" > comment.md
-            echo "agents_draft/ および latest_submission/ に変更が検出されなかったため、ベンチマークをスキップしました。" >> comment.md
+            echo "agents_draft/ および latest_submission_path.txt に変更が検出されなかったため、ベンチマークをスキップしました。" >> comment.md
             exit 0
           fi
           

@@ -2,6 +2,38 @@
 
 本ファイルは、プロジェクト開発における変更履歴、実装意図、検証結果を記録するログファイルです。
 
+## [2026-06-27 09:20] 最強候補エージェント管理の latest_submission_path.txt 移行とフォルダ廃止
+
+### 1. 作業概要
+- 最強候補エージェントのコピーやコード重複を防止し、切り替えを容易にするため、`latest_submission/` フォルダを廃止し、パス指示ファイル `latest_submission_path.txt` による動的参照方式へ移行。
+- **新規ファイルの追加**:
+  - `latest_submission_path.txt` を新設し、初期最強候補として `agents/StarEx` を指定。
+- **重複フォルダの削除**:
+  - 不要となった `latest_submission/` フォルダ配下の重複ファイルをすべて削除。
+- **スクリプト・テストコードの修正**:
+  - [tests/utils.py](file:///workspaces/pole/tests/utils.py) のエージェント自動検出ロジック (`discover_agents`) を修正し、`latest_submission_path.txt` の内容から最強候補（キー: `latest_submission`）のフォルダパスを動的に読み込むように改善。
+  - [scripts/benchmark.sh](file:///workspaces/pole/scripts/benchmark.sh) および [scripts/visualize.sh](file:///workspaces/pole/scripts/visualize.sh) において、デフォルトの対戦相手（`AGENT_B`）を `latest_submission_path.txt` の内容から動的にパス解決するよう修正。
+- **GitHub Actions ワークフローの修正**:
+  - [.github/workflows/ci.yml](file:///workspaces/pole/.github/workflows/ci.yml) において、静的チェック対象 `PATHS` の動的解決ロジックに `latest_submission_path.txt` を導入。
+  - [.github/workflows/benchmark.yml](file:///workspaces/pole/.github/workflows/benchmark.yml) において、PRの差分検知ターゲットを `latest_submission/**` から `latest_submission_path.txt` に変更し、手動およびPRトリガー時の最強候補（対戦相手）のパスを `latest_submission_path.txt` から動的に取得・解決するよう修正。
+- **ドキュメントの更新**:
+  - [README.md](file:///workspaces/pole/README.md)、[docs/development_flow.md](file:///workspaces/pole/docs/development_flow.md)、[docs/testing_and_execution.md](file:///workspaces/pole/docs/testing_and_execution.md)、[docs/ci_cd_actions.md](file:///workspaces/pole/docs/ci_cd_actions.md) に記載されている `latest_submission/` のフォルダ説明を `latest_submission_path.txt` のパス指定仕様へ更新。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| [latest_submission_path.txt](file:///workspaces/pole/latest_submission_path.txt) | 🟢 新規 | 最強候補エージェントの相対パス（`agents/StarEx`）を記述する設定ファイルを新規作成。 |
+| [tests/utils.py](file:///workspaces/pole/tests/utils.py) | 🟠 重大 | `discover_agents` にて `latest_submission_path.txt` の読み取り・パス解決ロジックを追加。 |
+| [scripts/benchmark.sh](file:///workspaces/pole/scripts/benchmark.sh) | 🟠 重大 | デフォルトの比較対象 `AGENT_B` を `latest_submission_path.txt` から動的解決するよう修正。 |
+| [scripts/visualize.sh](file:///workspaces/pole/scripts/visualize.sh) | 🟠 重大 | デフォルトの比較対象 `AGENT_B` を `latest_submission_path.txt` から動的解決するよう修正。 |
+| [.github/workflows/ci.yml](file:///workspaces/pole/.github/workflows/ci.yml) | 🟠 重大 | 静的チェック対象パス `PATHS` に `latest_submission_path.txt` の指すパスを動的に含めるよう修正。 |
+| [.github/workflows/benchmark.yml](file:///workspaces/pole/.github/workflows/benchmark.yml) | 🟠 重大 | 変更検知を `latest_submission_path.txt` に変更し、対戦相手解決に `latest_submission_path.txt` を用いるよう修正。 |
+| [README.md](file:///workspaces/pole/README.md) | 🟡 軽微 | ディレクトリ構成図内の `latest_submission/` フォルダを `latest_submission_path.txt` の説明へ更新。 |
+| [docs/development_flow.md](file:///workspaces/pole/docs/development_flow.md) | 🟡 軽微 | エージェント管理構造の説明を `latest_submission_path.txt` に合わせて改訂。 |
+| [docs/testing_and_execution.md](file:///workspaces/pole/docs/testing_and_execution.md) | 🟡 軽微 | デフォルトの対戦相手が `latest_submission_path.txt` から読み込まれる仕様へ更新。 |
+| [docs/ci_cd_actions.md](file:///workspaces/pole/docs/ci_cd_actions.md) | 🟡 軽微 | 自動ベンチマーク時の対戦相手 (Base) の決定仕様を `latest_submission_path.txt` 仕様へ更新。 |
+| `latest_submission/` | 🔴 削除 | 不要になった最強候補のコピー元フォルダを削除。 |
+
 ## [2026-06-27 07:18] 全エージェントのリンターエラー解消とコードフォーマット
 
 ### 1. 作業概要

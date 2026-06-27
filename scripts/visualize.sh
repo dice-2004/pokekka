@@ -47,7 +47,12 @@ if [ "$NO_LINT" = false ]; then
 fi
 
 # デフォルト設定
-AGENT_B="latest_submission/main.py"
+if [ -f "$PROJECT_ROOT/latest_submission_path.txt" ]; then
+  LATEST_DIR=$(cat "$PROJECT_ROOT/latest_submission_path.txt" | tr -d '\r' | xargs)
+  AGENT_B="$LATEST_DIR/main.py"
+else
+  AGENT_B="latest_submission/main.py"
+fi
 OUTPUT="scratch/visualizer.html"
 
 # エージェント解決関数

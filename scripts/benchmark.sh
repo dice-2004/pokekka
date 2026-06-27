@@ -102,7 +102,12 @@ has_final_arg() {
 
 # デフォルト設定を適用する（明示的な指定や自動マッピングがなければ）
 if ! has_final_arg "--agent-b" && ! has_arg "--agent-b"; then
-  AGENT_B="latest_submission/main.py"
+  if [ -f "$PROJECT_ROOT/latest_submission_path.txt" ]; then
+    LATEST_DIR=$(cat "$PROJECT_ROOT/latest_submission_path.txt" | tr -d '\r' | xargs)
+    AGENT_B="$LATEST_DIR/main.py"
+  else
+    AGENT_B="latest_submission/main.py"
+  fi
   FINAL_ARGS+=("--agent-b" "$AGENT_B")
 fi
 

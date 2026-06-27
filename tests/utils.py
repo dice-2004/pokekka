@@ -108,7 +108,14 @@ def discover_agents(
 
     # 3. latest_submission/ (提出予定)
     if include_submission:
-        submission_dir = os.path.join(abs_root, "latest_submission")
+        txt_path = os.path.join(abs_root, "latest_submission_path.txt")
+        if os.path.isfile(txt_path):
+            with open(txt_path, "r", encoding="utf-8") as f:
+                rel_path = f.read().strip()
+            submission_dir = os.path.join(abs_root, rel_path)
+        else:
+            submission_dir = os.path.join(abs_root, "latest_submission")
+
         if _is_valid_agent_dir(submission_dir):
             agents["latest_submission"] = submission_dir
 

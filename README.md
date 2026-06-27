@@ -40,7 +40,7 @@
 │   └── update_cg.sh       # 共通ゲームエンジン API 同期スクリプト
 ├── agents_draft/          # 🔧 開発・作業中のエージェントフォルダ (PR対戦対象)
 ├── agents/                # ✅ 完成・マージ済みのエージェントフォルダ
-├── latest_submission/     # 🏆 現在の提出予定エージェント (PR対戦相手)
+├── latest_submission_path.txt # 🏆 現在の提出予定（最強候補）エージェントの相対パスを記述したファイル
 ├── sample_submission/     # テンプレート (コピー元・直接編集しない)
 │   ├── main.py
 │   ├── deck.csv
