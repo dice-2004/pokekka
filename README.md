@@ -8,12 +8,12 @@
 ## 1. クイックスタート (最も簡単な起動確認)
 
 1. VS Code を起動し、本プロジェクトをクローンしたフォルダを開きます。
-2. 拡張機能「**Dev Containers**」がインストールされている状態で、画面右下に表示される「**Reopen in Container**」をクリックします（自動でコンテナがビルド・起動されます）。
+2. 拡張機能「**Dev Containers**」がインストールされている状態で、画面左下の緑色のマーク（`><`）をクリックし、「**Reopen in Container (コンテナで開く)**」を選択します（自動でコンテナがビルド・起動されます）。
 3. コンテナ内のターミナルで以下のコマンドを実行し、エージェントが正常に動作するか確認します。
    ```bash
-   python tests/dry_run.py
+   dry_run.sh
    ```
-   *(すべて `Passed` で終了すれば、環境構築および動作チェックは成功です)*
+   *(自動でリンターチェックが走り、エラーがなければシミュレーションテストが開始します。すべて `Passed` で終了すれば、環境構築および動作チェックは成功です)*
 
 ---
 
@@ -23,13 +23,21 @@
 ├── .agents/
 │   └── AGENTS.md          # AI 開発ガイドライン (AIアシスタント用指示書)
 ├── .devcontainer/
-│   ├── Dockerfile         # 共通開発環境用 Dockerfile (linux/amd64ベース)
+│   ├── Dockerfile         # 共通開発環境用 Dockerfile (openssh-client内蔵)
 │   └── devcontainer.json  # VS Code 用開発コンテナ構成設定
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml         # PR作成時のコード品質・動作検証 (CI)
 │       ├── benchmark.yml  # PR作成時の新旧エージェント自動勝率測定
 │       └── archive_agent.yml # マージ時のエージェント自動アーカイブ (移動)
+├── scripts/               # 便利な Docker 実行コマンド（環境自動判定・引数内包）
+│   ├── run_in_env.sh      # 環境自動判定・中継ヘルパー
+│   ├── lint.sh            # リンター & 静的チェック (Black/Flake8/Mypy)
+│   ├── dry_run.sh         # 動作検証テスト (開始前に自動で lint 実行)
+│   ├── benchmark.sh       # 勝率測定ベンチマーク (開始前に自動で lint 実行)
+│   ├── visualize.sh       # 対戦GUI可視化 HTML 出力
+│   ├── fetch_samples.sh   # 公式サンプル自動取得ツール (Kaggle API利用)
+│   └── update_cg.sh       # 共通ゲームエンジン API 同期スクリプト
 ├── agents_draft/          # 🔧 開発・作業中のエージェントフォルダ (PR対戦対象)
 ├── agents/                # ✅ 完成・マージ済みのエージェントフォルダ
 ├── latest_submission/     # 🏆 現在の提出予定エージェント (PR対戦相手)
@@ -38,13 +46,14 @@
 │   ├── deck.csv
 │   └── cg/                # ゲームエンジン (C++共有ライブラリ libcg.so 内蔵)
 ├── sample_deck/           # 🎁 ダウンロードされた公式サンプルエージェントフォルダ
-├── tests/                 # ローカル検証・CI用テストスクリプト
-│   ├── fetch_samples.py   # 公式サンプル自動取得ツール (Kaggle API利用)
-│   ├── dry_run.py         # 動作検証テスト
-│   ├── benchmark.py       # 勝率測定ベンチマークテスト (並列処理・プロセス隔離内蔵)
-│   └── visualize_match.py # 対戦可視化ツール (HTMLビューアの出力)
+├── tests/                 # ローカル検証・CI用テストスクリプト本体
+│   ├── fetch_samples.py
+│   ├── dry_run.py
+│   ├── benchmark.py
+│   ├── update_cg.py
+│   └── visualize_match.py
 ├── scratch/               # 可視化 HTML などが一時的に出力されるディレクトリ
-├── docs/                  # 開発者向け総合ドキュメント (再編成済み)
+├── docs/                  # 開発者向け総合ドキュメント
 ├── LOG.md                 # 開発作業ログ (変更のたびに要記録)
 └── README.md              # 本ドキュメント (ポータル)
 ```
@@ -57,10 +66,10 @@
 
 | # | ドキュメント | 主な内容 |
 | :--- | :--- | :--- |
-| 1 | **[開発環境セットアップマニュアル](docs/setup.md)** | Docker・Dev Containers を用いた環境構築手順、Kaggle APIの登録方法、公式サンプルの自動ダウンロード方法。 |
-| 2 | **[実行・テスト・検証マニュアル](docs/testing_and_execution.md)** | 動作検証 (Dry Run)、並列対戦ベンチマーク (Benchmark)、対戦GUI可視化 (Visualization) の実行コマンド。 |
+| 1 | **[開発環境セットアップマニュアル](docs/setup.md)** | Docker・Dev Containers を用いた環境構築手順、Kaggle APIの登録方法、公式サンプルの自動ダウンロード方法、**SSH接続(Git操作用)の設定手順**。 |
+| 2 | **[実行・テスト・検証マニュアル](docs/testing_and_execution.md)** | 動作検証 (Dry Run)、並列対戦ベンチマーク (Benchmark)、対戦GUI可視化 (Visualization)、静的チェック (Linter/Linter自動修正) のスクリプト実行方法。 |
 | 3 | **[PR・マージ時の自動Actionsマニュアル](docs/ci_cd_actions.md)** | プルリクエスト作成からマージまでに自動実行される CI 検証、勝率自動レポート、マージ時自動アーカイブの仕組み。 |
-| 4 | **[開発の進め方・規約マニュアル](docs/development_flow.md)** | ブランチ名の命名規則（`feature/**`など）、3層フォルダの管理ルール、Kaggleレギュレーション制約、提出パッケージ作成手順。 |
+| 4 | **[開発の進め方・規約マニュアル](docs/development_flow.md)** | ブランチ名の命名規則（`feature/**`など）、3層フォルダの管理ルール、Git操作制限、提出パッケージ作成手順。 |
 
 ---
 

@@ -13,10 +13,20 @@ jobs:
       contents: write
 
     steps:
+    # 1. 作成したGitHub Appから一時的な認証トークンを生成
+    - name: Generate Token from GitHub App
+      id: app-token
+      uses: actions/create-github-app-token@v1
+      with:
+        app-id: ${{ secrets.APP_ID }}
+        private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+    # 2. 生成したトークンを使ってリポジトリをチェックアウト
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
         fetch-depth: 2
+        token: ${{ steps.app-token.outputs.token }} # デフォルトの代わりに使用
 
     - name: Identify and archive changed draft agents
       run: |
@@ -44,14 +54,14 @@ jobs:
 
           if [ -d "$SRC" ]; then
             echo "Archiving $SRC to $DST..."
-            
+
             # ディレクトリのコピー
             mkdir -p "agents"
             cp -r "$SRC" "agents/"
-            
+
             # コピー元の削除
             rm -rf "$SRC"
-            
+
             # Gitのステージング
             git add "$DST"
             # すでに削除したディレクトリなので git rm -r で追跡から外す
