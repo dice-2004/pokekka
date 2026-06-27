@@ -2,6 +2,24 @@
 
 本ファイルは、プロジェクト開発における変更履歴、実装意図、検証結果を記録するログファイルです。
 
+## [2026-06-27 07:18] 全エージェントのリンターエラー解消とコードフォーマット
+
+### 1. 作業概要
+- PRのCIアクション（Linter & Type Checker）に引っかからないよう、リポジトリ内の全エージェントを対象にリンター（Black, Flake8, Mypy）を実行。
+- **コードスタイルの自動整形**:
+  - `bash scripts/lint.sh --fix` により、[latest_submission/main.py](file:///workspaces/pole/latest_submission/main.py)、[agents/StarEx/main.py](file:///workspaces/pole/agents/StarEx/main.py)、[agents/DragonBomb/main.py](file:///workspaces/pole/agents/DragonBomb/main.py) の3ファイルに対して Black によるコードフォーマットを適用。
+- **Mypy型注釈の追加**:
+  - Mypyチェックで検出された、`defaultdict(int)` に対する型注釈不足エラー (`Need type annotation for "field_counts"` 等) を解決するため、上記3ファイルの該当箇所に明示的な型注釈 (`defaultdict[int, int]`) を追加。
+- **動作検証 (Dry Run) の確認**:
+  - `bash scripts/dry_run.sh` を実行し、リンターチェックおよび対象エージェントのシミュレーションテストがすべてエラーなし（Passed 2, Failed 0）で合格することを確認。
+
+### 2. 変更・追加されたファイル
+| ファイル | 深刻度 | 変更内容 |
+|---------|--------|---------|
+| [latest_submission/main.py](file:///workspaces/pole/latest_submission/main.py) | 🟡 軽微 | Blackによる自動整形、および `field_counts` / `hand_counts` / `discard_counts` に型注釈 `defaultdict[int, int]` を追加。 |
+| [agents/StarEx/main.py](file:///workspaces/pole/agents/StarEx/main.py) | 🟡 軽微 | Blackによる自動整形、および `field_counts` / `hand_counts` / `discard_counts` に型注釈 `defaultdict[int, int]` を追加。 |
+| [agents/DragonBomb/main.py](file:///workspaces/pole/agents/DragonBomb/main.py) | 🟡 軽微 | Blackによる自動整形、および `field_counts` / `hand_counts` / `discard_counts` に型注釈 `defaultdict[int, int]` を追加。 |
+
 ## [2026-06-26 19:57] イワパレス（Crustle）コントロールデッキのバグ修正とコダック・キチキギス最適化
 
 ### 1. 作業概要
