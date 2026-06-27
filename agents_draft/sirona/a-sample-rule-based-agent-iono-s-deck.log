@@ -1,0 +1,18 @@
+[{"stream_name":"stderr","time":9.359959751,"data":"0.00s - Debugger warning: It seems that frozen modules are being used, which may\n"}
+,{"stream_name":"stderr","time":9.360041531,"data":"0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off\n"}
+,{"stream_name":"stderr","time":9.360051151,"data":"0.00s - to python to disable frozen modules.\n"}
+,{"stream_name":"stderr","time":9.360053831,"data":"0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.\n"}
+,{"stream_name":"stderr","time":9.969142569,"data":"0.00s - Debugger warning: It seems that frozen modules are being used, which may\n"}
+,{"stream_name":"stderr","time":9.969183529,"data":"0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off\n"}
+,{"stream_name":"stderr","time":9.969188999,"data":"0.00s - to python to disable frozen modules.\n"}
+,{"stream_name":"stderr","time":9.969192919,"data":"0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.\n"}
+,{"stream_name":"stdout","time":12.760926337,"data":"Writing main.py\n"}
+,{"stream_name":"stderr","time":17.112986867,"data":"/usr/local/lib/python3.11/dist-packages/traitlets/traitlets.py:2915: FutureWarning: --Exporter.preprocessors=[\"remove_papermill_header.RemovePapermillHeader\"] for containers is deprecated in traitlets 5.0. You can pass `--Exporter.preprocessors item` ... multiple times to add items to a list.\n"}
+,{"stream_name":"stderr","time":17.113042367,"data":"  warn(\n"}
+,{"stream_name":"stderr","time":17.17372588,"data":"[NbConvertApp] Converting notebook __notebook__.ipynb to notebook\n"}
+,{"stream_name":"stderr","time":17.426127754,"data":"[NbConvertApp] Writing 25360 bytes to __notebook__.ipynb\n"}
+,{"stream_name":"stderr","time":20.302019566,"data":"/usr/local/lib/python3.11/dist-packages/traitlets/traitlets.py:2915: FutureWarning: --Exporter.preprocessors=[\"nbconvert.preprocessors.ExtractOutputPreprocessor\"] for containers is deprecated in traitlets 5.0. You can pass `--Exporter.preprocessors item` ... multiple times to add items to a list.\n"}
+,{"stream_name":"stderr","time":20.302072006,"data":"  warn(\n"}
+,{"stream_name":"stderr","time":20.338517815,"data":"[NbConvertApp] Converting notebook __notebook__.ipynb to html\n"}
+,{"stream_name":"stderr","time":21.121016839,"data":"[NbConvertApp] Writing 348618 bytes to __results__.html\n"}
+]
