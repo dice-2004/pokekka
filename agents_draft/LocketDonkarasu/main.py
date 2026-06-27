@@ -1,4 +1,5 @@
 import os
+
 # import sys
 from collections import defaultdict
 
@@ -141,7 +142,9 @@ can_attack = False
 can_main_attack = False
 can_energy_attach = False
 # 特定ポケモン対策フラグ
-opponent_has_id119: bool = False  # 119(Goldeen等)が相手に確認されたら以降Articunoを壁に使わない
+opponent_has_id119: bool = (
+    False  # 119(Goldeen等)が相手に確認されたら以降Articunoを壁に使わない
+)
 use_support = 0  # The Supporter card planned for use.
 bench_attacker = False  # Whether there is a Benched
 # Pokémon that is ready to attack
@@ -370,8 +373,7 @@ def main_option_proc(obs: Observation, damage: int):
             rocket_feathers_can_ko = False
 
             best_support_id = max(
-                (c.id for c in my_state.hand
-                    if c.id in TEAM_ROCKET_SUPPORTERS),
+                (c.id for c in my_state.hand if c.id in TEAM_ROCKET_SUPPORTERS),
                 key=lambda sid: ROCKET_SUPPORT_DISCARD_PRIORITY.get(sid, 99),
                 default=None,
             )
@@ -449,8 +451,7 @@ def agent(obs_dict: dict) -> list[int]:
         elif log.type == LogType.MOVE_CARD:
             if (
                 log.playerIndex == my_index
-                and (log.fromArea == AreaType.BENCH or
-                     log.fromArea == AreaType.ACTIVE)
+                and (log.fromArea == AreaType.BENCH or log.fromArea == AreaType.ACTIVE)
                 and log.toArea == AreaType.DISCARD
             ):
                 pre_ko = True
@@ -602,8 +603,7 @@ def agent(obs_dict: dict) -> list[int]:
 
                 if rocket_energy_count == 1:
                     supporters_in_hand = sum(
-                        1 for c in my_state.hand
-                        if c.id in TEAM_ROCKET_SUPPORTERS
+                        1 for c in my_state.hand if c.id in TEAM_ROCKET_SUPPORTERS
                     )
 
                     effective_discard = max(0, supporters_in_hand - 1)
@@ -743,8 +743,7 @@ def agent(obs_dict: dict) -> list[int]:
                 score = 500
         elif id == Porygon_Z:
             # Stage 2 final form - highest endgame potential
-            if field_counts[Porygon2] > 0\
-                                      and rocket_support_discard_count >= 8:
+            if field_counts[Porygon2] > 0 and rocket_support_discard_count >= 8:
                 score = 30000  # Very strong
                 # if we have enough discarded supporters
             else:
@@ -769,8 +768,7 @@ def agent(obs_dict: dict) -> list[int]:
                 score = 30000  # Still valuable even at hand limit
         elif id == Proton:
             rocket_basics_in_deck = (
-                deck_counts[Murkrow] + deck_counts[Porygon] +
-                deck_counts[Articuno]
+                deck_counts[Murkrow] + deck_counts[Porygon] + deck_counts[Articuno]
             )
             bench_space = 5 - len(my_state.bench)
             is_first_turn = state.turn <= 1
@@ -797,14 +795,12 @@ def agent(obs_dict: dict) -> list[int]:
                 ignition_in_hand = sum(
                     1 for c in my_state.hand if c.id == Ignition_Energy
                 )
-                honchkrow_on_bench = any(c.id == Honchkrow
-                                         for c in my_state.bench)
+                honchkrow_on_bench = any(c.id == Honchkrow for c in my_state.bench)
                 if ignition_in_hand >= 1 and honchkrow_on_bench:
                     score = -1  # Honchkrow+Ignitionのコンボが成立しうる→リセット禁止
                 else:
                     current_hand_scores = [
-                        hand_score(c.id, True)
-                        for c in my_state.hand if c.id != Archer
+                        hand_score(c.id, True) for c in my_state.hand if c.id != Archer
                     ]
                     avg_score = (
                         sum(current_hand_scores) / len(current_hand_scores)
@@ -878,8 +874,7 @@ def agent(obs_dict: dict) -> list[int]:
             score = max(murkrow_score, honchkrow_score)
         elif id == Team_Rocket_s_Factory:
             # Stadium - draw 2 after playing Rocket supporter
-            if state.supporterPlayed or (not ignore_count
-                                         and support_count > 0):
+            if state.supporterPlayed or (not ignore_count and support_count > 0):
                 score = 35000  # Good value for draw acceleration
             else:
                 score = 2000
@@ -891,8 +886,7 @@ def agent(obs_dict: dict) -> list[int]:
                     max_score = max(max_score, attach_score(id, pokemon, True))
             for pokemon in my_state.bench:
                 if pokemon and pokemon.id in {Murkrow, Honchkrow, Articuno}:
-                    max_score = max(max_score,
-                                    attach_score(id, pokemon, False))
+                    max_score = max(max_score, attach_score(id, pokemon, False))
             score = max_score if max_score > 0 else 2000
         elif id == Ignition_Energy:
             if (
@@ -901,8 +895,7 @@ def agent(obs_dict: dict) -> list[int]:
                 and my_state.active[0].id == Honchkrow
             ):
                 rocket_energy_count = sum(
-                    1 for e in my_state.active[0].energyCards
-                    if e.id == Rocket_Energy
+                    1 for e in my_state.active[0].energyCards if e.id == Rocket_Energy
                 )
                 if rocket_energy_count >= 2:
                     score = -1  # 不要
@@ -917,8 +910,7 @@ def agent(obs_dict: dict) -> list[int]:
         return score
 
     def has_hand_energy():
-        return any(c.id in {Rocket_Energy, Ignition_Energy}
-                   for c in my_state.hand)
+        return any(c.id in {Rocket_Energy, Ignition_Energy} for c in my_state.hand)
 
     def can_evolve_from_hand():
         """
@@ -927,20 +919,17 @@ def agent(obs_dict: dict) -> list[int]:
         for c in my_state.hand:
             if c.id == Honchkrow:
                 for p in my_state.active + my_state.bench:
-                    if p is not None and p.id == Murkrow\
-                           and not p.appearThisTurn:
+                    if p is not None and p.id == Murkrow and not p.appearThisTurn:
                         return True
 
             elif c.id == Porygon2:
                 for p in my_state.active + my_state.bench:
-                    if p is not None and p.id == Porygon\
-                          and not p.appearThisTurn:
+                    if p is not None and p.id == Porygon and not p.appearThisTurn:
                         return True
 
             elif c.id == Porygon_Z:
                 for p in my_state.active + my_state.bench:
-                    if p is not None and p.id == Porygon2\
-                          and not p.appearThisTurn:
+                    if p is not None and p.id == Porygon2 and not p.appearThisTurn:
                         return True
 
         return False
@@ -951,14 +940,10 @@ def agent(obs_dict: dict) -> list[int]:
         前提条件（エネルギー・進化・手札）を踏まえて判定する。
         0を返した場合は技が出せない。
         """
-        has_rocket = any(e.id == Rocket_Energy
-                         for e in bench_pokemon.energyCards)
-        has_ignition = any(e.id == Ignition_Energy
-                           for e in bench_pokemon.energyCards)
-        can_attach_rocket = any(c.id == Rocket_Energy
-                                for c in my_state.hand)
-        can_attach_ignition = any(c.id == Ignition_Energy
-                                  for c in my_state.hand)
+        has_rocket = any(e.id == Rocket_Energy for e in bench_pokemon.energyCards)
+        has_ignition = any(e.id == Ignition_Energy for e in bench_pokemon.energyCards)
+        can_attach_rocket = any(c.id == Rocket_Energy for c in my_state.hand)
+        can_attach_ignition = any(c.id == Ignition_Energy for c in my_state.hand)
         supporters_in_hand = sum(
             1 for c in my_state.hand if c.id in TEAM_ROCKET_SUPPORTERS
         )
@@ -972,10 +957,7 @@ def agent(obs_dict: dict) -> list[int]:
         if p.id == Murkrow and not p.appearThisTurn:
             can_evo = any(c.id == Honchkrow for c in my_state.hand)
             energy_ok = (
-                has_rocket
-                or has_ignition
-                or can_attach_rocket
-                or can_attach_ignition
+                has_rocket or has_ignition or can_attach_rocket or can_attach_ignition
             )
             if can_evo and energy_ok:
                 effective_discard = max(0, supporters_in_hand - 1)
@@ -984,10 +966,7 @@ def agent(obs_dict: dict) -> list[int]:
         # Honchkrow：Rocket_EnergyかIgnition_Energyがある
         elif p.id == Honchkrow:
             energy_ok = (
-                has_rocket
-                or has_ignition
-                or can_attach_rocket
-                or can_attach_ignition
+                has_rocket or has_ignition or can_attach_rocket or can_attach_ignition
             )
             if energy_ok:
                 effective_discard = max(0, supporters_in_hand - 1)
@@ -1007,14 +986,10 @@ def agent(obs_dict: dict) -> list[int]:
                 return supporters_in_discard * 20
             # PorygonZに進化して打てる
             can_evo = (
-                any(c.id == Porygon_Z for c in my_state.hand)
-                and not p.appearThisTurn
+                any(c.id == Porygon_Z for c in my_state.hand) and not p.appearThisTurn
             )
             energy_ok = (
-                has_rocket
-                or has_ignition
-                or can_attach_rocket
-                or can_attach_ignition
+                has_rocket or has_ignition or can_attach_rocket or can_attach_ignition
             )
             if can_evo and energy_ok:
                 return supporters_in_discard * 20
@@ -1022,10 +997,7 @@ def agent(obs_dict: dict) -> list[int]:
         # PorygonZ：Rocket_EnergyかIgnition_Energyがある
         elif p.id == Porygon_Z:
             energy_ok = (
-                has_rocket
-                or has_ignition
-                or can_attach_rocket
-                or can_attach_ignition
+                has_rocket or has_ignition or can_attach_rocket or can_attach_ignition
             )
             if energy_ok:
                 return supporters_in_discard * 20
@@ -1108,8 +1080,7 @@ def agent(obs_dict: dict) -> list[int]:
             support_score = 0
             for o in select.option:
                 if o.type == OptionType.PLAY:
-                    card = get_card(obs, AreaType.HAND,
-                                    o.index, state.yourIndex)
+                    card = get_card(obs, AreaType.HAND, o.index, state.yourIndex)
                     if card_table[card.id].cardType == CardType.SUPPORTER:
                         score = hand_score(card.id, True)
                         if support_score < score:
@@ -1134,13 +1105,10 @@ def agent(obs_dict: dict) -> list[int]:
     )  # Whether to restrict actions that reduce the deck
     do_switch = not can_main_attack and (
         bench_attacker
-        or (active_id != Budew and field_counts[Budew] >= 1
-            and state.turn >= 2)
+        or (active_id != Budew and field_counts[Budew] >= 1 and state.turn >= 2)
     )
-    effect_card_id = 0 if select.effect \
-        is None else select.effect.id
-    context_card_id = 0 if select.contextCard \
-        is None else select.contextCard.id
+    effect_card_id = 0 if select.effect is None else select.effect.id
+    context_card_id = 0 if select.contextCard is None else select.contextCard.id
 
     scores = []  # Score for each action
     for o in select.option:
@@ -1189,8 +1157,7 @@ def agent(obs_dict: dict) -> list[int]:
                         elif card.id == Drakloak:  # Honchkrow
                             # 手札にIgnition_Energyがあればアクティブに出した瞬間に技が打てる
                             ignition_in_hand = sum(
-                                1 for c in my_state.hand
-                                if c.id == Ignition_Energy
+                                1 for c in my_state.hand if c.id == Ignition_Energy
                             )
                             if ignition_in_hand > 0:
                                 score += 150000  # Ignitionがあれば最優先
@@ -1247,8 +1214,7 @@ def agent(obs_dict: dict) -> list[int]:
                     print("contextCard =", select.contextCard)
                     print("min =", select.minCount)
                     print("max =", select.maxCount)
-                    if select.effect is not None \
-                            and select.effect.id == Honchkrow:
+                    if select.effect is not None and select.effect.id == Honchkrow:
                         print("remaining =", rocket_feathers_remaining)
                         if rocket_feathers_remaining <= 0:
                             score = -1000000
@@ -1355,9 +1321,7 @@ def agent(obs_dict: dict) -> list[int]:
                     score = -1
             elif card.id == Proton:
                 rocket_basics_in_deck = (
-                    deck_counts[Murkrow] +
-                    deck_counts[Porygon] +
-                    deck_counts[Articuno]
+                    deck_counts[Murkrow] + deck_counts[Porygon] + deck_counts[Articuno]
                 )
                 bench_space = 5 - len(my_state.bench)
                 is_first_turn = state.turn <= 1
@@ -1380,16 +1344,14 @@ def agent(obs_dict: dict) -> list[int]:
                 ignition_in_hand = sum(
                     1 for c in my_state.hand if c.id == Ignition_Energy
                 )
-                honchkrow_on_bench = any(c.id == Honchkrow
-                                         for c in my_state.bench)
+                honchkrow_on_bench = any(c.id == Honchkrow for c in my_state.bench)
                 if not pre_ko or state.supporterPlayed:
                     score = -1
                 elif ignition_in_hand >= 1 and honchkrow_on_bench:
                     score = -1  # コンボ保持を優先
                 else:
                     current_hand_scores = [
-                        hand_score(c.id, True) for c in my_state.hand
-                        if c.id != Archer
+                        hand_score(c.id, True) for c in my_state.hand if c.id != Archer
                     ]
                     avg_score = (
                         sum(current_hand_scores) / len(current_hand_scores)
@@ -1464,9 +1426,7 @@ def agent(obs_dict: dict) -> list[int]:
         elif o.type == OptionType.ATTACH:
             card = get_card(obs, o.area, o.index, my_index)
             pokemon = get_card(obs, o.inPlayArea, o.inPlayIndex, my_index)
-            score = attach_score(card.id,
-                                 pokemon,
-                                 o.inPlayArea == AreaType.ACTIVE)
+            score = attach_score(card.id, pokemon, o.inPlayArea == AreaType.ACTIVE)
             print("ATTACH", card.id, "->", pokemon.id, "score=", score)
         elif o.type == OptionType.EVOLVE:
             pokemon = get_card(obs, o.inPlayArea, o.inPlayIndex, my_index)
@@ -1503,8 +1463,7 @@ def agent(obs_dict: dict) -> list[int]:
             else:
                 score = -1
         elif o.type == OptionType.ATTACK:
-            print("ATTACK OPTION", o.attackId,
-                  "ROCKET", ROCKET_FEATHERS_ATTACK_ID)
+            print("ATTACK OPTION", o.attackId, "ROCKET", ROCKET_FEATHERS_ATTACK_ID)
             if o.attackId == ROCKET_FEATHERS_ATTACK_ID:
                 supporters_in_hand = sum(
                     1 for c in my_state.hand if c.id in TEAM_ROCKET_SUPPORTERS
@@ -1543,8 +1502,7 @@ def agent(obs_dict: dict) -> list[int]:
         supporters.sort()
 
         if rocket_feathers_can_ko:
-            output = [idx for _, idx
-                      in supporters[:rocket_feathers_required_support]]
+            output = [idx for _, idx in supporters[:rocket_feathers_required_support]]
         else:
             output = []
 
@@ -1558,8 +1516,7 @@ def agent(obs_dict: dict) -> list[int]:
                     select.option[idx].playerIndex,
                 )
 
-                if not keep_used\
-                        and card.id == rocket_feathers_keep_support_id:
+                if not keep_used and card.id == rocket_feathers_keep_support_id:
                     keep_used = True
                     continue
 
@@ -1573,9 +1530,7 @@ def agent(obs_dict: dict) -> list[int]:
     output = []
 
     if len(scores) >= 1:
-        sorted_scores = sorted(enumerate(scores),
-                               key=lambda x: x[1],
-                               reverse=True)
+        sorted_scores = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
 
         limit = min(select.maxCount, len(sorted_scores))
 
