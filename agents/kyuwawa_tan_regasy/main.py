@@ -1983,7 +1983,11 @@ def choose_ciphermaniac_stack_options(
                 select.option[index].playerIndex,
             )
             score = score_ciphermaniac_stack_card(card, info, obs, stacked_counts)
-            if best_score is None or (score, -index) > (best_score, -best_index):
+            if (
+                best_score is None
+                or best_index is None
+                or (score, -index) > (best_score, -best_index)
+            ):
                 best_index = index
                 best_score = score
 
