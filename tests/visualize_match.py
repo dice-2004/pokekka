@@ -52,38 +52,97 @@ def run_and_save_match(
         agent_b = load_agent(agent_b_path)
 
         # それぞれのデッキをロード
-        try:
-            deck_a = load_deck(os.path.dirname(args.agent_a))
-            deck_b = load_deck(os.path.dirname(args.agent_b))
-        except Exception as e:
+        deck_a = load_deck(os.path.dirname(agent_a_path))
+        deck_b = load_deck(os.path.dirname(agent_b_path))
 
-            print(f"Error loading decks: {e}")
-            sys.exit(1)
+        # 先攻・後攻の入れ替え
+        players = [agent_a, agent_b] if is_player0_a else [agent_b, agent_a]
+        match_decks = [deck_a, deck_b] if is_player0_a else [deck_b, deck_a]
 
-        print("Running match...")
-        print(f"Agent A: {args.agent_a}")
-        print(f"Agent B: {args.agent_b}")
+        env = make("cabt", configuration={"decks": match_decks}, debug=True)
+        env.run(players)
 
-        env = make("cabt", configuration={"decks": [deck_a, deck_b]}, debug=True)
-        env.run([agent_a, agent_b])
+        # 勝敗判定
+        reward_0 = getattr(env.state[0], "reward", None)
+        reward_1 = getattr(env.state[1], "reward", None)
 
-        # Output dir check
-        output_dir = os.path.dirname(os.path.abspath(args.output))
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir, exist_ok=True)
+        winner = -2  # Default to error
+        error_msg = None
 
-        print(f"Rendering match results to {args.output}...")
-        html_content = env.render(mode="html")
-        with open(args.output, "w", encoding="utf-8") as f:
-            f.write(html_content)
+        # 対戦中にエラーが発生したか確認
+        has_error = False
+        for ps in env.state:
+            if getattr(ps, "status", None) == "ERROR":
+                has_error = True
+                error_msg = getattr(ps, "message", "Agent execution error.")
+                break
 
-        print("Done. Please open the HTML file in a web browser to view the match.")
+        if not has_error:
+            if reward_0 is not None and reward_1 is not None:
+                if reward_0 > reward_1:
+                    winner_is_player0 = True
+                elif reward_1 > reward_0:
+                    winner_is_player0 = False
+                else:
+                    winner_is_player0 = None  # Draw
+
+                if winner_is_player0 is None:
+                    winner = -1
+                elif is_player0_a:
+                    winner = 0 if winner_is_player0 else 1
+                else:
+                    winner = 1 if winner_is_player0 else 0
+            else:
+                error_msg = "No reward data computed."
+
+        # visualize リストの取得
+        vis_list = None
+        if env.steps and len(env.steps) > 0 and len(env.steps[0]) > 0:
+            # Struct クラスは後から dict キーとして追加された要素への属性アクセス（.visualize）をサポートしないため、
+            # get() メソッドを使用して安全に取得します。
+            vis_list = env.steps[0][0].get("visualize")
+
+            # vis_list 内の ramainingTime を steps から設定（cabt.js の挙動を模倣）
+            if vis_list:
+                for i in range(len(vis_list)):
+                    for j in range(2):
+                        step_row = env.steps[i]
+                        player_step = (
+                            step_row[j] if step_row and j < len(step_row) else None
+                        )
+                        obs = player_step.get("observation") if player_step else None
+                        vis_list[i]["current"]["players"][j]["ramainingTime"] = (
+                            obs.get("remainingOverageTime", 600) if obs else 600
+                        )
+
+                # プレイヤー名リストを vis_list[0]["ps"] に追加（cabt.js の挙動を模倣）
+                if len(vis_list) > 0:
+                    agent_a_name = os.path.basename(os.path.dirname(agent_a_path))
+                    agent_b_name = os.path.basename(os.path.dirname(agent_b_path))
+                    p0_name = agent_a_name if is_player0_a else agent_b_name
+                    p1_name = agent_b_name if is_player0_a else agent_a_name
+                    vis_list[0]["ps"] = [p0_name, p1_name]
+
+        # info 取得
+        info = getattr(env, "info", {})
+        episode_id = info.get("EpisodeId", None) if info else None
+
+        result_data = {
+            "match_idx": match_idx,
+            "is_player0_a": is_player0_a,
+            "winner": winner,
+            "turns": len(env.steps),
+            "error": error_msg,
+            "vis_list": vis_list,
+            "episode_id": episode_id,
+        }
+
+        # JSONファイルとして出力
+        with open(output_json_path, "w", encoding="utf-8") as f:
+            json.dump(result_data, f)
 
     except Exception as e:
-        import traceback
-
-        traceback.print_exc()
-        print(f"Error executing match visualization: {e}")
+        print(f"Error in match subprocess: {e}")
         sys.exit(1)
 
 
