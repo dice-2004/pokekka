@@ -16,7 +16,7 @@
   - [scripts/benchmark.sh](file:///workspaces/pole/scripts/benchmark.sh) および [scripts/visualize.sh](file:///workspaces/pole/scripts/visualize.sh) において、デフォルトの対戦相手（`AGENT_B`）を `latest_submission_path.txt` の内容から動的にパス解決するよう修正。
 - **GitHub Actions ワークフローの修正**:
   - [.github/workflows/ci.yml](file:///workspaces/pole/.github/workflows/ci.yml) において、静的チェック対象 `PATHS` の動的解決ロジックに `latest_submission_path.txt` を導入。
-  - [.github/workflows/benchmark.yml](file:///workspaces/pole/.github/workflows/benchmark.yml) において、PRの差分検知ターゲットを `latest_submission/**` から `latest_submission_path.txt` に変更し、手動およびPRトリガー時の最強候補（対戦相手）のパスを `latest_submission_path.txt` から動的に取得・解決するよう修正。
+  - [.github/workflows/benchmark.yml](file:///workspaces/pole/.github/workflows/benchmark.yml) において、PRの自動ベンチマーク実行トリガーおよび判定条件を `agents_draft/` 配下の変更のみに制限（`latest_submission_path.txt` などの管理ファイル変更だけでは対戦をスキップ）するよう修正し、対戦時の比較相手解決にのみ `latest_submission_path.txt` を動的に使用するよう設計を最適化。
 - **ドキュメントの更新**:
   - [README.md](file:///workspaces/pole/README.md)、[docs/development_flow.md](file:///workspaces/pole/docs/development_flow.md)、[docs/testing_and_execution.md](file:///workspaces/pole/docs/testing_and_execution.md)、[docs/ci_cd_actions.md](file:///workspaces/pole/docs/ci_cd_actions.md) に記載されている `latest_submission/` のフォルダ説明を `latest_submission_path.txt` のパス指定仕様へ更新。
 
