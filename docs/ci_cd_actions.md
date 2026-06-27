@@ -36,8 +36,8 @@ graph TD
 - **処理内容**:
   1. `git diff` を実行し、`agents_draft/` 配下で変更のあった開発中エージェント（例: `agents_draft/my_agent`）を自動検出します。
   2. **対戦相手 (Base) の決定**:
-     - `main` ブランチの `latest_submission/main.py` （提出予定の最強候補エージェント）を対戦相手とします。
-     - もし `latest_submission/` がまだ main ブランチに存在しない場合は、自動的に `sample_submission/main.py`（標準テンプレート）を対戦相手に指定するフォールバックが機能します。
+     - `main` ブランチの `latest_submission_path.txt` で指定されたエージェント（提出予定の最強候補エージェント）を対戦相手とします。
+     - もし `latest_submission_path.txt` が main ブランチに存在しない場合は、自動的に `sample_submission/main.py`（標準テンプレート）を対戦相手に指定するフォールバックが機能します。
   3. **自動対戦の実行**:
      - 検出した新旧エージェントを **20試合自動対戦** させ、勝率と平均ターン数を測定します。
   4. **PRコメントへの自動レポート投稿**:
