@@ -124,6 +124,9 @@ POLYGONZ_ATTACK_ID = 671
 
 UNNECESSARY = -10000000
 
+# Giovanniで相手ベンチから優先的に引きずり出すポケモンIDリスト
+GIOVANNI_PRIORITY_TARGETS: list[int] = [235, 120]
+
 
 class AttackPlan:
     attack: int = 0
@@ -523,18 +526,31 @@ def agent(obs_dict: dict) -> list[int]:
             # Never attach energy to Articuno - it's a wall
             return -1
 
-        # Rocket's Energy - primary choice for Honchkrow line
+        # Rocket's Energy
         if attach_id == Rocket_Energy:
             if pokemon.id in {Murkrow, Honchkrow}:
-
                 rocket_energy_count = sum(
                     1 for e in pokemon.energyCards if e.id == Rocket_Energy
                 )
-
                 if rocket_energy_count > 0:
                     return -1
-
                 score = 50000
+                if active:
+                    score += 5000
+                return score
+
+            # PorygonZにもRocket_Energyを付与可能（C×2をカバー）
+            if pokemon.id == Porygon_Z:
+                rocket_energy_count = sum(
+                    1 for e in pokemon.energyCards if e.id == Rocket_Energy
+                )
+                ignition_count = sum(
+                    1 for e in pokemon.energyCards if e.id == Ignition_Energy
+                )
+                total_energy = len(pokemon.energies)
+                if total_energy > 0:
+                    return -1  # 既にエネルギーがあれば不要
+                score = 45000
                 if active:
                     score += 5000
                 return score
@@ -590,6 +606,71 @@ def agent(obs_dict: dict) -> list[int]:
                 return score
 
             return -1
+
+    def _giovanni_score() -> int:
+        """
+        Giovanniの使用価値を計算する。
+        控えの最大火力を求め、相手ベンチに引きずり出して倒す価値があるか判定する。
+        GIOVANNI_PRIORITY_TARGETS に含まれるポケモンは火力・プライズ条件を問わず優先する。
+        """
+        # 控えの最大火力を持つポケモンと火力を求める
+        best_damage = 0
+        for p in my_state.bench:
+            if p is None:
+                continue
+            dmg = bench_attacker_max_damage(p)
+            if dmg > best_damage:
+                best_damage = dmg
+
+        if best_damage == 0:
+            return -1  # 前提条件を満たす控えがいない
+
+        op_active = (
+            op_state.active[0]
+            if op_state.active and op_state.active[0] is not None
+            else None
+        )
+        op_active_prize = prize_count(op_active, True) if op_active else 0
+        op_active_hp = op_active.hp if op_active else 9999
+
+        best_score = 0
+        for p in op_state.bench:
+            if p is None:
+                continue
+
+            bench_prize = prize_count(p, True)
+            bench_hp = p.hp
+            is_priority_target = p.id in GIOVANNI_PRIORITY_TARGETS
+
+            # 優先ターゲットは火力・プライズ条件を問わず引きずり出す
+            if is_priority_target:
+                candidate_score = 90000 + bench_prize * 10000
+                if candidate_score > best_score:
+                    best_score = candidate_score
+                if best_damage >= bench_hp:
+                    continue  # 通常の倒せるか判定はスキップ
+
+            # 通常ターゲット：控えの火力で倒せるか確認
+            if best_damage < bench_hp:
+                continue
+
+            # 倒すとゲームが終わるか
+            remaining_prizes = len(my_state.prize) - bench_prize
+            if remaining_prizes <= 0:
+                return 100000  # 勝利確定 → 即採用
+
+            # 相手アクティブより多くのプライズが取れるか
+            if bench_prize > op_active_prize:
+                candidate_score = 70000 + bench_prize * 10000
+            elif bench_prize == op_active_prize and bench_hp < op_active_hp:
+                candidate_score = 45000
+            else:
+                candidate_score = -1
+
+            if candidate_score > best_score:
+                best_score = candidate_score
+
+        return best_score if best_score > 0 else -1
 
     def hand_score(id: int, ignore_count: bool):
         """Evaluate hand card value for Team Rocket's Honchkrow deck."""
@@ -789,12 +870,9 @@ def agent(obs_dict: dict) -> list[int]:
             score -= 100000  # Strong penalty for having multiples already
 
         return score
-    
+
     def has_hand_energy():
-        return any(
-            c.id in {Rocket_Energy, Ignition_Energy}
-            for c in my_state.hand
-        )
+        return any(c.id in {Rocket_Energy, Ignition_Energy} for c in my_state.hand)
 
     def can_evolve_from_hand():
         """
@@ -803,33 +881,91 @@ def agent(obs_dict: dict) -> list[int]:
         for c in my_state.hand:
             if c.id == Honchkrow:
                 for p in my_state.active + my_state.bench:
-                    if (
-                        p is not None
-                        and p.id == Murkrow
-                        and not p.appearThisTurn
-                    ):
+                    if p is not None and p.id == Murkrow and not p.appearThisTurn:
                         return True
 
             elif c.id == Porygon2:
                 for p in my_state.active + my_state.bench:
-                    if (
-                        p is not None
-                        and p.id == Porygon
-                        and not p.appearThisTurn
-                    ):
+                    if p is not None and p.id == Porygon and not p.appearThisTurn:
                         return True
 
             elif c.id == Porygon_Z:
                 for p in my_state.active + my_state.bench:
-                    if (
-                        p is not None
-                        and p.id == Porygon2
-                        and not p.appearThisTurn
-                    ):
+                    if p is not None and p.id == Porygon2 and not p.appearThisTurn:
                         return True
 
         return False
-    
+
+    def bench_attacker_max_damage(bench_pokemon: Pokemon) -> int:
+        """
+        控えのポケモンが今ターン出せる最大ダメージを計算する。
+        前提条件（エネルギー・進化・手札）を踏まえて判定する。
+        0を返した場合は技が出せない。
+        """
+        has_rocket = any(e.id == Rocket_Energy for e in bench_pokemon.energyCards)
+        has_ignition = any(e.id == Ignition_Energy for e in bench_pokemon.energyCards)
+        can_attach_rocket = any(c.id == Rocket_Energy for c in my_state.hand)
+        can_attach_ignition = any(c.id == Ignition_Energy for c in my_state.hand)
+        supporters_in_hand = sum(
+            1 for c in my_state.hand if c.id in TEAM_ROCKET_SUPPORTERS
+        )
+        supporters_in_discard = sum(
+            discard_counts.get(sid, 0) for sid in TEAM_ROCKET_SUPPORTERS
+        )
+
+        p = bench_pokemon
+
+        # Murkrow → Honchkrowに進化可能かつエネルギーを用意できる
+        if p.id == Murkrow and not p.appearThisTurn:
+            can_evo = any(c.id == Honchkrow for c in my_state.hand)
+            energy_ok = (
+                has_rocket or has_ignition or can_attach_rocket or can_attach_ignition
+            )
+            if can_evo and energy_ok:
+                effective_discard = max(0, supporters_in_hand - 1)
+                return effective_discard * 60
+
+        # Honchkrow：Rocket_EnergyかIgnition_Energyがある
+        elif p.id == Honchkrow:
+            energy_ok = (
+                has_rocket or has_ignition or can_attach_rocket or can_attach_ignition
+            )
+            if energy_ok:
+                effective_discard = max(0, supporters_in_hand - 1)
+                return effective_discard * 60
+
+        # Porygon → Porygon2に進化可能かつIgnitionがある
+        elif p.id == Porygon and not p.appearThisTurn:
+            can_evo = any(c.id == Porygon2 for c in my_state.hand)
+            energy_ok = has_ignition or can_attach_ignition
+            if can_evo and energy_ok:
+                return supporters_in_discard * 20
+
+        # Porygon2：Ignitionがある OR PorygonZに進化可能でRocket/Ignitionがある
+        elif p.id == Porygon2:
+            # Ignitionで打てる
+            if has_ignition or can_attach_ignition:
+                return supporters_in_discard * 20
+            # PorygonZに進化して打てる
+            can_evo = (
+                any(c.id == Porygon_Z for c in my_state.hand) and not p.appearThisTurn
+            )
+            energy_ok = (
+                has_rocket or has_ignition or can_attach_rocket or can_attach_ignition
+            )
+            if can_evo and energy_ok:
+                return supporters_in_discard * 20
+
+        # PorygonZ：Rocket_EnergyかIgnition_Energyがある
+        elif p.id == Porygon_Z:
+            energy_ok = (
+                has_rocket or has_ignition or can_attach_rocket or can_attach_ignition
+            )
+            if energy_ok:
+                return supporters_in_discard * 20
+
+        return 0
+
     def has_ready_evolution_attacker():
         """
         エネルギーを付ければすぐ攻勢に転じられる進化ポケモンが存在するか
@@ -845,9 +981,7 @@ def agent(obs_dict: dict) -> list[int]:
             #
             if p.id == Honchkrow:
                 supporters = sum(
-                    1
-                    for c in my_state.hand
-                    if c.id in TEAM_ROCKET_SUPPORTERS
+                    1 for c in my_state.hand if c.id in TEAM_ROCKET_SUPPORTERS
                 )
 
                 if hand_energy and supporters >= 2:
@@ -857,24 +991,18 @@ def agent(obs_dict: dict) -> list[int]:
             # Porygon2
             #
             elif p.id == Porygon2:
-                if (
-                    hand_energy
-                    and rocket_support_discard_count >= 8
-                ):
+                if hand_energy and rocket_support_discard_count >= 8:
                     return True
 
             #
             # PorygonZ
             #
             elif p.id == Porygon_Z:
-                if (
-                    hand_energy
-                    and rocket_support_discard_count >= 8
-                ):
+                if hand_energy and rocket_support_discard_count >= 8:
                     return True
 
         return False
-    
+
     should_wall_with_articuno = False
 
     has_evolution = any(
@@ -890,10 +1018,7 @@ def agent(obs_dict: dict) -> list[int]:
     # 進化ポケモンなし
     #
     if not has_evolution:
-        if (
-            not can_evolve_from_hand()
-            or not hand_energy
-        ):
+        if not can_evolve_from_hand() or not hand_energy:
             should_wall_with_articuno = True
 
     #
@@ -990,8 +1115,7 @@ def agent(obs_dict: dict) -> list[int]:
                         elif card.id == Drakloak:  # Honchkrow
                             # 手札にIgnition_Energyがあればアクティブに出した瞬間に技が打てる
                             ignition_in_hand = sum(
-                                1 for c in my_state.hand \
-                                    if c.id == Ignition_Energy
+                                1 for c in my_state.hand if c.id == Ignition_Energy
                             )
                             if ignition_in_hand > 0:
                                 score += 150000  # Ignitionがあれば最優先
@@ -1199,11 +1323,10 @@ def agent(obs_dict: dict) -> list[int]:
                     else:
                         score = 10000
             elif card.id == Giovanni:
-                # Support fuel - conditional
-                if card_score > 0 and not state.supporterPlayed:
-                    score = 9000
-                else:
+                if state.supporterPlayed:
                     score = -1
+                else:
+                    score = _giovanni_score()
             elif card.id == Petrel:
                 # Support fuel - conditional
                 if card_score > 0 and not state.supporterPlayed:
