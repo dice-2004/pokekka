@@ -1,4 +1,5 @@
 import os
+from typing import Optional, List, Dict, Set, DefaultDict, Union
 
 # import sys
 from collections import defaultdict
@@ -129,54 +130,52 @@ POLYGONZ_ATTACK_ID = 671
 UNNECESSARY = -10000000
 
 # Giovanniで相手ベンチから優先的に引きずり出すポケモンIDリスト
-GIOVANNI_PRIORITY_TARGETS: list[int] = [235, 120]
+GIOVANNI_PRIORITY_TARGETS: List[int] = [235, 120]
 
 
 class AttackPlan:
     attack: int = 0
-    counter: list[int] = []
+    counter: List[int] = []
 
 
-can_switch = False
-can_attack = False
-can_main_attack = False
-can_energy_attach = False
+can_switch: bool = False
+can_attack: bool = False
+can_main_attack: bool = False
+can_energy_attach: bool = False
 # 特定ポケモン対策フラグ
 opponent_has_id119: bool = (
     False  # 119(Goldeen等)が相手に確認されたら以降Articunoを壁に使わない
 )
-use_support = 0  # The Supporter card planned for use.
-bench_attacker = False  # Whether there is a Benched
+use_support: int = 0  # The Supporter card planned for use.
+bench_attacker: bool = False  # Whether there is a Benched
 # Pokémon that is ready to attack
-polygon_mode = False
-pre_turn_log: list[Log] = []
-current_turn_log: list[Log] = []
+polygon_mode: bool = False
+pre_turn_log: List[Log] = []
+current_turn_log: List[Log] = []
 
-prize: list[int] = []
-card_counts: defaultdict[int, int] = defaultdict(int)
-serial_set: set[int] = set()
+prize: List[int] = []
+card_counts: DefaultDict[int, int] = defaultdict(int)
+serial_set: Set[int] = set()
 plan_a = AttackPlan()
 plan_b = AttackPlan()
-preferred_attack_id = ROCKET_FEATHERS_ATTACK_ID
-rocket_feathers_remaining = 0
-rocket_feathers_required_support = 0
-rocket_feathers_can_ko = False
-rocket_feathers_keep_support_id = None
-rocket_feathers_discard_budget = 0
-rocket_support_discard_count = 0
-opponent_active_hp = 0
-rocket_feathers_discard_indices: set[int] = set()
+preferred_attack_id: int = ROCKET_FEATHERS_ATTACK_ID
+rocket_feathers_remaining: int = 0
+rocket_feathers_required_support: int = 0
+rocket_feathers_can_ko: bool = False
+rocket_feathers_keep_support_id: Optional[int] = None
+rocket_feathers_discard_budget: int = 0
+rocket_support_discard_count: int = 0
+opponent_active_hp: int = 0
+rocket_feathers_discard_indices: Set[int] = set()
 
 
 def no_damage_dex(id: int) -> bool:
-    """Returns whether the target should be deprioritized for direct\
-          Rocket Feathers damage."""
+    """Returns whether the target should be deprioritized for direct Rocket Feathers damage."""
     return id in {158, 207, 330, 345}
 
 
 def no_damage_counter(pokemon: Pokemon) -> bool:
-    """Returns whether the target is bad for counter-based bench \
-        damage planning."""
+    """Returns whether the target is bad for counter-based bench damage planning."""
     if (
         pokemon.id == 28
         or pokemon.id == 199
@@ -208,8 +207,7 @@ def prize_count(pokemon: Pokemon, is_attack_damage: bool) -> int:
 
 
 def pokemon_score(pokemon: Pokemon, is_attack_damage: bool) -> int:
-    """Heuristically evaluates the tactical worth of targeting a specific\
-          Pokémon on the opponent's field."""
+    """Heuristically evaluates the tactical worth of targeting a specific Pokémon on the opponent's field."""
     data = card_table[pokemon.id]
     score = prize_count(pokemon, is_attack_damage) * 1000
     score += len(pokemon.energies) * 150
@@ -254,8 +252,9 @@ def set_card_counts(obs: Observation, my_index: int):
         card_counts[id] += 1
 
     state = obs.current
+    assert state is not None
     my_state = state.players[my_index]
-    for card in my_state.hand:
+    for card in my_state.hand or []:
         add_card_count(card, my_index)
     for card in my_state.discard:
         add_card_count(card, my_index)
@@ -263,7 +262,7 @@ def set_card_counts(obs: Observation, my_index: int):
         add_card_count(card, my_index)
     for card in my_state.active:
         add_card_count(card, my_index)
-    for card in state.stadium:
+    for card in state.stadium or []:
         add_card_count(card, my_index)
     if state.looking is not None:
         for card in state.looking:
@@ -273,34 +272,40 @@ def set_card_counts(obs: Observation, my_index: int):
 
 def get_card(
     obs: Observation, area: AreaType, index: int, player_index: int
-) -> Pokemon | Card | None:
+) -> Optional[Union[Pokemon, Card]]:
     """Helper function to safely extract a Card or Pokemon object \
         from specific zones."""
+    assert obs.current is not None
     ps = obs.current.players[player_index]
-    match area:
-        case AreaType.DECK:
-            return obs.select.deck[index]
-        case AreaType.HAND:
-            return ps.hand[index]
-        case AreaType.DISCARD:
-            return ps.discard[index]
-        case AreaType.ACTIVE:
-            return ps.active[index]
-        case AreaType.BENCH:
-            return ps.bench[index]
-        case AreaType.PRIZE:
-            return ps.prize[index]
-        case AreaType.STADIUM:
-            return obs.current.stadium[index]
-        case AreaType.LOOKING:
-            return obs.current.looking[index]
-        case _:
-            return None
+    if area == AreaType.DECK:
+        assert obs.select is not None
+        assert obs.select.deck is not None
+        return obs.select.deck[index]
+    elif area == AreaType.HAND:
+        assert ps.hand is not None
+        return ps.hand[index]
+    elif area == AreaType.DISCARD:
+        return ps.discard[index]
+    elif area == AreaType.ACTIVE:
+        return ps.active[index]
+    elif area == AreaType.BENCH:
+        return ps.bench[index]
+    elif area == AreaType.PRIZE:
+        return ps.prize[index]
+    elif area == AreaType.STADIUM:
+        return obs.current.stadium[index]
+    elif area == AreaType.LOOKING:
+        assert obs.current.looking is not None
+        return obs.current.looking[index]
+    else:
+        return None
 
 
-def main_option_proc(obs: Observation, damage: int):
+def main_option_proc(obs: Observation, damage: int) -> None:
     state = obs.current
+    assert state is not None
     select = obs.select
+    assert select is not None
     my_index = state.yourIndex
     my_state = state.players[my_index]
     op_state = state.players[1 - my_index]
@@ -417,10 +422,13 @@ def agent(obs_dict: dict) -> list[int]:
     global opponent_has_id119
 
     state = obs.current
+    assert state is not None
     select = obs.select
+    assert select is not None
     context = select.context
     my_index = state.yourIndex
     my_state = state.players[my_index]
+    assert my_state.hand is not None
     op_state = state.players[1 - my_index]
 
     if state.turn == 0:
@@ -522,7 +530,7 @@ def agent(obs_dict: dict) -> list[int]:
     no_more_dex = field_counts[Porygon] * 2 >= len(op_state.prize)
 
     stadium_id = 0
-    for card in state.stadium:
+    for card in state.stadium or []:
         stadium_id = card.id
     """
     support_count = 0
@@ -705,7 +713,7 @@ def agent(obs_dict: dict) -> list[int]:
 
         return best_score if best_score > 0 else -1
 
-    def hand_score(id: int, ignore_count: bool):
+    def hand_score(id: int, ignore_count: bool) -> int:
         """Evaluate hand card value for Team Rocket's Honchkrow deck."""
         score = 0
 
@@ -909,10 +917,11 @@ def agent(obs_dict: dict) -> list[int]:
 
         return score
 
-    def has_hand_energy():
+    def has_hand_energy() -> bool:
+        assert my_state.hand is not None
         return any(c.id in {Rocket_Energy, Ignition_Energy} for c in my_state.hand)
 
-    def can_evolve_from_hand():
+    def can_evolve_from_hand() -> bool:
         """
         手札からすぐ進化できるポケモンが盤面に存在するか
         """
@@ -1004,7 +1013,7 @@ def agent(obs_dict: dict) -> list[int]:
 
         return 0
 
-    def has_ready_evolution_attacker():
+    def has_ready_evolution_attacker() -> bool:
         """
         エネルギーを付ければすぐ攻勢に転じられる進化ポケモンが存在するか
         """
@@ -1081,6 +1090,7 @@ def agent(obs_dict: dict) -> list[int]:
             for o in select.option:
                 if o.type == OptionType.PLAY:
                     card = get_card(obs, AreaType.HAND, o.index, state.yourIndex)
+                    assert card is not None
                     if card_table[card.id].cardType == CardType.SUPPORTER:
                         score = hand_score(card.id, True)
                         if support_score < score:
@@ -1089,7 +1099,7 @@ def agent(obs_dict: dict) -> list[int]:
 
     hand_scores = []
     negative_hand_count = 0
-    for card in my_state.hand:
+    for card in my_state.hand or []:
         score = hand_score(card.id, False)
         hand_scores.append(score)
         if score < 0:
@@ -1259,6 +1269,7 @@ def agent(obs_dict: dict) -> list[int]:
                             if no_damage_counter(card):
                                 score = -1
                 elif context == SelectContext.ATTACH_FROM:
+                    assert isinstance(card, Pokemon)
                     score = attach_score(
                         context_card_id, card, o.area == AreaType.ACTIVE
                     )
@@ -1272,10 +1283,12 @@ def agent(obs_dict: dict) -> list[int]:
                 else:
                     score = 10
                 card = get_card(obs, o.area, o.index, o.playerIndex)
+                assert card is not None
                 if card_table[card.id].cardType == CardType.SPECIAL_ENERGY:
                     score += 1
         elif o.type == OptionType.PLAY:
             card = get_card(obs, AreaType.HAND, o.index, my_index)
+            assert card is not None
             card_score = hand_scores[o.index]
 
             # Pokémon cards - Main lineup
@@ -1426,10 +1439,13 @@ def agent(obs_dict: dict) -> list[int]:
         elif o.type == OptionType.ATTACH:
             card = get_card(obs, o.area, o.index, my_index)
             pokemon = get_card(obs, o.inPlayArea, o.inPlayIndex, my_index)
+            assert card is not None
+            assert isinstance(pokemon, Pokemon)
             score = attach_score(card.id, pokemon, o.inPlayArea == AreaType.ACTIVE)
             print("ATTACH", card.id, "->", pokemon.id, "score=", score)
         elif o.type == OptionType.EVOLVE:
             pokemon = get_card(obs, o.inPlayArea, o.inPlayIndex, my_index)
+            assert isinstance(pokemon, Pokemon)
 
             # Murkrow -> Honchkrow: Highest evolution priority
             if pokemon.id == Murkrow:
@@ -1451,6 +1467,7 @@ def agent(obs_dict: dict) -> list[int]:
                 score = 10000 + len(pokemon.energies) * 100
         elif o.type == OptionType.ABILITY:
             card = get_card(obs, o.area, o.index, my_index)
+            assert card is not None
             if no_draw:
                 score = -1
             elif card.id == 1267:  # Lumiose City
@@ -1494,6 +1511,7 @@ def agent(obs_dict: dict) -> list[int]:
                 o.index,
                 o.playerIndex,
             )
+            assert card is not None
 
             if card.id in TEAM_ROCKET_SUPPORTERS:
                 priority = ROCKET_SUPPORT_DISCARD_PRIORITY.get(card.id, 99)
@@ -1515,6 +1533,7 @@ def agent(obs_dict: dict) -> list[int]:
                     select.option[idx].index,
                     select.option[idx].playerIndex,
                 )
+                assert card is not None
 
                 if not keep_used and card.id == rocket_feathers_keep_support_id:
                     keep_used = True
